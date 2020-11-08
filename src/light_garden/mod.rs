@@ -1,0 +1,566 @@
+extern crate nalgebra as na;
+
+use collision2d::geo::*;
+pub use light::*;
+use na::{distance, Point2};
+pub use object::*;
+use rayon::prelude::*;
+use std::collections::VecDeque;
+use std::time::Instant;
+
+pub mod light;
+pub mod object;
+
+pub struct LightGarden {
+    mouse_pos: Point2<Float>,
+    pub lights: Vec<Light>,
+    pub max_bounce: i32,
+    pub num_rays: u32,
+    pub objects: Vec<Object>,
+    drawing_object: Option<Object>,
+    pub selected_object: Option<usize>,
+    pub selected_light: Option<usize>,
+    pub selected_color: Color,
+    pub color_state_descriptor: wgpu::ColorStateDescriptor,
+    pub recreate_pipeline: bool,
+    pub canvas_bounds: Rect,
+    pub ray_width: f64,
+    pub mode: Mode,
+    pub refractive_index: Float,
+    pub chunk_size: usize,
+    trace_time_vd: VecDeque<f64>,
+}
+
+impl LightGarden {
+    pub fn new(canvas_bounds: Rect, descriptor_format: wgpu::TextureFormat) -> LightGarden {
+        let light = Light::PointLight(PointLight::new(Point2::new(-0.1, 0.1), 10000, [0.1; 4]));
+        let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8, 5.);
+        let color_state_descriptor = wgpu::ColorStateDescriptor {
+            format: descriptor_format,
+            alpha_blend: wgpu::BlendDescriptor {
+                src_factor: wgpu::BlendFactor::SrcAlpha,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+            color_blend: wgpu::BlendDescriptor {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+            },
+            write_mask: wgpu::ColorWrite::ALL,
+        };
+        LightGarden {
+            mouse_pos: Point2::new(0., 0.),
+            lights: vec![light],
+            objects: vec![lens],
+            drawing_object: None,
+            selected_object: None,
+            selected_light: None,
+            color_state_descriptor,
+            recreate_pipeline: true,
+            max_bounce: 5,
+            num_rays: 2000,
+            canvas_bounds,
+            selected_color: [0.05, 0.05, 0.05, 0.01],
+            ray_width: 1.0,
+            mode: Mode::NoMode,
+            refractive_index: 2.,
+            chunk_size: 100,
+            trace_time_vd: VecDeque::new(),
+        }
+    }
+
+    pub fn update_mouse_position(&mut self, position: P2) {
+        self.mouse_pos = position;
+        let aspect = self.canvas_bounds.width / self.canvas_bounds.height;
+        self.mouse_pos.x *= aspect;
+        if !self.canvas_bounds.contains(&self.mouse_pos) {
+            return;
+        }
+        self.update();
+    }
+
+    pub fn update(&mut self) {
+        match self.mode {
+            Mode::DrawMirrorEnd { start } => {
+                self.drawing_object = Some(Object::new_mirror(start, self.mouse_pos));
+            }
+
+            Mode::DrawCircleEnd { start } => {
+                self.drawing_object = Some(Object::new_circle(
+                    start,
+                    distance(&start, &self.mouse_pos),
+                    self.refractive_index,
+                ));
+            }
+
+            Mode::DrawRectEnd { start } => {
+                let vdiff_t2 = 2. * (self.mouse_pos - start);
+                let width = vdiff_t2[0].abs();
+                let height = vdiff_t2[1].abs();
+                self.drawing_object = Some(Object::new_rect(
+                    start,
+                    width,
+                    height,
+                    self.refractive_index,
+                ));
+            }
+
+            Mode::Move => {
+                let mouse_pos = self.mouse_pos;
+                if let Some(obj) = self.get_selected_object() {
+                    obj.set_origin(mouse_pos);
+                }
+                if let Some(ix) = self.selected_light {
+                    self.lights[ix].set_origin(mouse_pos);
+                }
+            }
+
+            Mode::Rotate => {
+                let mouse_pos = self.mouse_pos;
+                if let Some(obj) = self.get_selected_object() {
+                    obj.set_rotation(&(mouse_pos - obj.get_origin()));
+                }
+            }
+
+            _ => {}
+        }
+    }
+
+    pub fn mouse_clicked(&mut self) {
+        if !self.canvas_bounds.contains(&self.mouse_pos) {
+            return;
+        }
+        match self.mode {
+            Mode::NoMode => {
+                self.selected_object = None;
+                self.selected_light = None;
+            }
+
+            Mode::Selecting(None) => {
+                self.selected_object = None;
+                self.selected_light = None;
+                let mut min_distance = Float::MAX;
+                for (ix, o) in self.objects.iter().enumerate() {
+                    let dist = o.distance(&self.mouse_pos);
+                    if dist < min_distance {
+                        min_distance = dist;
+                        self.selected_object = Some(ix);
+                    }
+                }
+                for (ix, l) in self.lights.iter().enumerate() {
+                    let dist = distance(&l.get_origin(), &self.mouse_pos);
+                    if dist < min_distance {
+                        min_distance = dist;
+                        self.selected_object = None;
+                        self.selected_light = Some(ix);
+                    }
+                }
+                self.mode = Mode::Selected;
+            }
+
+            Mode::Selecting(Some(op)) => {
+                if let Some(current_ix) = self.selected_object {
+                    let mut min_distance = Float::MAX;
+                    let mut click_selected = None;
+                    // find closest object
+                    for (ix, o) in self.objects.iter().enumerate() {
+                        let dist = o.distance(&self.mouse_pos);
+                        if dist < min_distance {
+                            min_distance = dist;
+                            click_selected = Some(ix);
+                        }
+                    }
+                    if let Some(click_ix) = click_selected {
+                        if current_ix == click_ix {
+                            // both objects are the same -> abort
+                            self.mode = Mode::Selected;
+                            return;
+                        } else {
+                            let geo_a = self.objects[current_ix].get_geometry();
+                            let geo_b = self.objects[click_ix].get_geometry();
+                            let geo = match op {
+                                LogicOp::And => geo_a & geo_b,
+                                LogicOp::Or => geo_a | geo_b,
+                                LogicOp::AndNot => geo_a.and_not(geo_b),
+                            };
+                            self.objects[current_ix.min(click_ix)] = Object::new_geo(
+                                geo,
+                                self.objects[current_ix].get_material().refractive_index,
+                            );
+                            // current_ix != click_ix
+                            self.objects.remove(current_ix.max(click_ix));
+                            self.mode = Mode::Selected;
+                            self.selected_object = Some(current_ix.min(click_ix));
+                        }
+                    }
+                } else {
+                    // there is no currently selected object so performing a logic op is not possible
+                    self.mode = Mode::NoMode;
+                }
+            }
+
+            Mode::Selected => {}
+
+            Mode::Move => {
+                self.mode = Mode::Selected;
+            }
+
+            Mode::Rotate => {
+                self.mode = Mode::Selected;
+            }
+
+            Mode::DrawPointLight => {
+                self.lights.push(Light::PointLight(PointLight::new(
+                    self.mouse_pos,
+                    self.num_rays,
+                    self.selected_color,
+                )));
+                self.mode = Mode::NoMode;
+            }
+
+            Mode::DrawMirrorStart => {
+                self.mode = Mode::DrawMirrorEnd {
+                    start: self.mouse_pos,
+                };
+            }
+
+            Mode::DrawMirrorEnd { start } => {
+                self.objects.push(Object::new_mirror(start, self.mouse_pos));
+                self.drawing_object = None;
+                self.mode = Mode::NoMode;
+            }
+
+            Mode::DrawCircleStart => {
+                self.mode = Mode::DrawCircleEnd {
+                    start: self.mouse_pos,
+                };
+            }
+
+            Mode::DrawCircleEnd { start } => {
+                self.objects.push(Object::new_circle(
+                    start,
+                    distance(&start, &self.mouse_pos),
+                    self.refractive_index,
+                ));
+                self.drawing_object = None;
+                self.mode = Mode::NoMode;
+            }
+
+            Mode::DrawRectStart => {
+                self.mode = Mode::DrawRectEnd {
+                    start: self.mouse_pos,
+                };
+            }
+
+            Mode::DrawRectEnd { start } => {
+                let vdiff_t2 = 2. * (self.mouse_pos - start);
+                let width = vdiff_t2[0].abs();
+                let height = vdiff_t2[1].abs();
+                self.objects.push(Object::new_rect(
+                    start,
+                    width,
+                    height,
+                    self.refractive_index,
+                ));
+                self.drawing_object = None;
+                self.mode = Mode::NoMode;
+            }
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.lights = Vec::new();
+        self.objects = Vec::new();
+        self.drawing_object = None;
+        self.selected_object = None;
+        self.selected_light = None;
+    }
+
+    pub fn clear_objects(&mut self) {
+        self.objects = Vec::new();
+        self.drawing_object = None;
+    }
+
+    pub fn get_selected_object(&mut self) -> Option<&mut Object> {
+        if let Some(ix) = self.selected_object {
+            Some(&mut self.objects[ix])
+        } else {
+            None
+        }
+    }
+
+    pub fn get_selected_light(&mut self) -> Option<&mut Light> {
+        if let Some(ix) = self.selected_light {
+            Some(&mut self.lights[ix])
+        } else {
+            None
+        }
+    }
+
+    pub fn delete_selected(&mut self) {
+        if let Some(ix) = self.selected_light {
+            self.lights.remove(ix);
+            self.selected_light = None;
+        }
+        if let Some(ix) = self.selected_object {
+            self.objects.remove(ix);
+            self.selected_object = None;
+        }
+    }
+
+    pub fn deselect(&mut self) {
+        self.selected_light = None;
+        self.selected_object = None;
+        self.drawing_object = None;
+        self.mode = Mode::NoMode;
+    }
+
+    pub fn update_tick(&mut self, _frame_time: f64) {}
+
+    pub fn get_trace_time(&self) -> f64 {
+        self.trace_time_vd.iter().sum::<f64>() / self.trace_time_vd.len() as f64
+    }
+
+    pub fn trace_all_reflective(&mut self) -> Vec<(Vec<P2>, Color)> {
+        if let Some(dro) = self.drawing_object.clone() {
+            self.objects.push(dro);
+        }
+        let mut all_line_strips: Vec<(Vec<P2>, Color)> = Vec::new();
+        for light in self.lights.iter() {
+            let line_strips = light
+                .get_rays()
+                .par_iter()
+                .map(|ray| {
+                    let mut line_strip = vec![ray.get_origin()];
+                    self.trace_reflective(&mut line_strip, ray, light.get_color(), self.max_bounce);
+                    (line_strip, light.get_color())
+                })
+                .collect::<Vec<(Vec<P2>, Color)>>();
+            all_line_strips.extend(line_strips);
+        }
+        if self.drawing_object.is_some() {
+            self.objects.pop();
+        }
+        all_line_strips
+    }
+
+    pub fn trace_reflective(&self, rays: &mut Vec<P2>, ray: &Ray, color: Color, max_bounce: i32) {
+        if max_bounce <= 0 {
+            return;
+        }
+        let mut refopt = None;
+        let mut ret_intersect: Option<P2> = None;
+        if let Some(intersection_point) = ray.intersect(&self.canvas_bounds) {
+            ret_intersect = Some(intersection_point.get_first().0);
+        }
+        for obj in self.objects.iter() {
+            if let Some(reflected) = ray.reflect_on(&obj.get_geometry()) {
+                if let Some(intersect) = ret_intersect {
+                    if distance(&ray.get_origin(), &reflected.get_origin())
+                        < distance(&ray.get_origin(), &intersect)
+                    {
+                        ret_intersect = Some(reflected.get_origin());
+                        refopt = Some(reflected);
+                    }
+                } else {
+                    // first reflection
+                    ret_intersect = Some(reflected.get_origin());
+                    refopt = Some(reflected);
+                }
+            }
+        }
+        if let Some(ls) = ret_intersect {
+            rays.push(ls);
+        }
+        if let Some(reflected) = refopt {
+            self.trace_reflective(rays, &reflected, color, max_bounce - 1);
+        }
+    }
+
+    pub fn trace_all(&mut self) -> Vec<(P2, Color)> {
+        let instant_start = Instant::now();
+        if let Some(dro) = self.drawing_object.clone() {
+            self.objects.push(dro);
+        }
+        let mut all_lines: Vec<(P2, Color)> = Vec::new();
+        for light in self.lights.iter() {
+            let mut refractive_index = 1.;
+            for obj in self.objects.iter() {
+                match obj {
+                    Object::Circle(c, material) => {
+                        if c.contains(&light.get_origin()) {
+                            refractive_index = material.refractive_index;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let lines: Vec<(P2, Color)> = light
+                .get_rays()
+                .par_chunks(self.chunk_size)
+                .map(|rays| {
+                    let mut lines = Vec::new();
+                    for ray in rays {
+                        self.trace(
+                            &mut lines,
+                            ray,
+                            light.get_color(),
+                            refractive_index,
+                            self.max_bounce,
+                        );
+                    }
+                    lines
+                })
+                .collect::<Vec<Vec<(P2, Color)>>>()
+                .concat();
+            all_lines.extend(lines);
+        }
+        if self.drawing_object.is_some() {
+            self.objects.pop();
+        }
+
+        // fill limit testing
+        // all_lines.resize(
+        // 1000,
+        // (
+        // LineSegment::from_ab(P2::new(0., 0.), P2::new(0., 0.)),
+        // [1.0; 4],
+        // ),
+        // );
+
+        self.trace_time_vd
+            .push_back(instant_start.elapsed().as_micros() as f64 / 1000.0);
+        if self.trace_time_vd.len() > 20 {
+            self.trace_time_vd.pop_front();
+        }
+
+        all_lines
+    }
+
+    pub fn trace(
+        &self,
+        rays: &mut Vec<(P2, Color)>,
+        ray: &Ray,
+        color: Color,
+        refractive_index: Float,
+        max_bounce: i32,
+    ) {
+        let mut trace_rays = vec![(*ray, color, refractive_index)];
+        let mut back_buffer = Vec::new();
+        for _ in 0..max_bounce {
+            if trace_rays.is_empty() {
+                return;
+            }
+            for (ray, color, refractive_index) in &trace_rays {
+                if color[0] < 0.001 && color[1] < 0.001 && color[3] < 0.001 {
+                    return;
+                }
+
+                // find the nearest object
+                let mut nearest: Float = std::f64::MAX;
+                let mut nearest_index = None;
+                for (index, obj) in self.objects.iter().enumerate() {
+                    if let Some(intersection) = ray.intersect(&obj.get_geometry()) {
+                        let dist_sq = distance_squared(&ray.get_origin(), &intersection[0].0);
+                        if dist_sq < nearest {
+                            nearest = dist_sq;
+                            nearest_index = Some(index);
+                        }
+                    }
+                }
+
+                if let Some(index) = nearest_index {
+                    let obj = self.objects[index].clone();
+                    match obj {
+                        Object::Mirror(_) => {
+                            if let Some((reflected, _, i)) =
+                                ray.reflect_on_normal_intersect(&self.objects[index].get_geometry())
+                            {
+                                rays.push((ray.get_origin(), *color));
+                                rays.push((i, *color));
+                                back_buffer.push((reflected, *color, *refractive_index));
+                                // self.trace(rays, &reflected, *color, *refractive_index, max_bounce);
+                            }
+                        }
+
+                        Object::Rect(_, material)
+                        | Object::Circle(_, material)
+                        | Object::Lens(_, material)
+                        | Object::Geo(_, material) => {
+                            let mut updated_refractive_index = 1.;
+                            let result;
+                            if obj.contains(&ray.get_origin()) {
+                                result = ray.refract_on(
+                                    &obj.get_geometry(),
+                                    material.refractive_index,
+                                    1.,
+                                );
+                            } else {
+                                updated_refractive_index = material.refractive_index;
+                                result = ray.refract_on(
+                                    &obj.get_geometry(),
+                                    *refractive_index,
+                                    material.refractive_index,
+                                );
+                            }
+                            if let Some((reflected, orefracted, reflectance)) = result {
+                                rays.push((ray.get_origin(), *color));
+                                rays.push((reflected.get_origin(), *color));
+
+                                let refl = reflectance as f32;
+                                let omrefl = 1. - refl;
+                                let color1 =
+                                    [color[0] * refl, color[1] * refl, color[2] * refl, color[3]];
+                                let color2 = [
+                                    color[0] * omrefl,
+                                    color[1] * omrefl,
+                                    color[2] * omrefl,
+                                    color[3],
+                                ];
+                                back_buffer.push((reflected, color1, *refractive_index));
+                                // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
+                                if let Some(refracted) = orefracted {
+                                    back_buffer.push((refracted, color2, updated_refractive_index));
+
+                                    // self.trace(
+                                    // rays,
+                                    // &refracted,
+                                    // color2,
+                                    // updated_refractive_index,
+                                    // max_bounce,
+                                    // );
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // handle canvas bounds
+                    if let Some(canvas_intersect) = ray.intersect(&self.canvas_bounds) {
+                        rays.push((ray.get_origin(), *color));
+                        rays.push((canvas_intersect.get_first().0, *color));
+                    }
+                }
+            }
+            trace_rays.clear();
+            trace_rays.extend(back_buffer.into_iter());
+            back_buffer = Vec::new();
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum Mode {
+    NoMode,
+    Selecting(Option<LogicOp>),
+    Selected,
+    Move,
+    Rotate,
+    DrawMirrorStart,
+    DrawMirrorEnd { start: P2 },
+    DrawCircleStart,
+    DrawCircleEnd { start: P2 },
+    DrawRectStart,
+    DrawRectEnd { start: P2 },
+    DrawPointLight,
+}
