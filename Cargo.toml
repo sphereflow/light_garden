@@ -7,16 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# conrod_core = {git = "https://github.com/PistonDevelopers/conrod", rev = "7a18b9c5e19f4f2c78a3c843dcfac60a9f64a3b2"}
-# conrod_piston = {git = "https://github.com/PistonDevelopers/conrod", rev = "7a18b9c5e19f4f2c78a3c843dcfac60a9f64a3b2"}
-# piston2d-graphics = "0.36"
-# pistoncore-input = "1.0.0"
-# piston_window = "0.111"
-# find_folder = "0.3.0"
-# piston2d-opengl_graphics = "0.73.0"
-# piston2d-gfx_graphics = "0.69.0"
-# gfx = "0.18.1"
-# pistoncore-glutin_window = "0.66.0"
 imgui = "0.5"
 imgui-wgpu = "0.11.0"
 imgui-winit-support = { version = "0.5", default-features = false, features = ["winit-22"] }
