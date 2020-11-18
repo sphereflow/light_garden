@@ -119,7 +119,7 @@ impl LightGarden {
             Mode::Rotate => {
                 let mouse_pos = self.mouse_pos;
                 if let Some(obj) = self.get_selected_object() {
-                    obj.set_rotation(&(mouse_pos - obj.get_origin()));
+                    obj.x_axis_look_at(&mouse_pos);
                 }
             }
 
@@ -461,11 +461,13 @@ impl LightGarden {
                 let mut nearest: Float = std::f64::MAX;
                 let mut nearest_index = None;
                 for (index, obj) in self.objects.iter().enumerate() {
-                    if let Some(intersection) = ray.intersect(&obj.get_geometry()) {
-                        let dist_sq = distance_squared(&ray.get_origin(), &intersection[0].0);
-                        if dist_sq < nearest {
-                            nearest = dist_sq;
-                            nearest_index = Some(index);
+                    if let Some(intersections) = ray.intersect(&obj.get_geometry()) {
+                        for (intersection, _) in intersections {
+                            let dist_sq = distance_squared(&ray.get_origin(), &intersection);
+                            if dist_sq < nearest {
+                                nearest = dist_sq;
+                                nearest_index = Some(index);
+                            }
                         }
                     }
                 }

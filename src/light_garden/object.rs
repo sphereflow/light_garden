@@ -19,7 +19,7 @@ impl Object {
     }
     pub fn new_rect(origin: P2, width: Float, height: Float, refractive_index: Float) -> Self {
         Object::Rect(
-            Rect::new(origin, V2::from([1., 0.]), width, height),
+            Rect::new(origin, Rot2::identity(), width, height),
             Material { refractive_index },
         )
     }
@@ -74,7 +74,7 @@ impl HasOrigin for Object {
 }
 
 impl Rotate for Object {
-    fn get_rotation(&self) -> V2 {
+    fn get_rotation(&self) -> Rot2 {
         match self {
             Object::Mirror(m) => m.line_segment.get_rotation(),
             Object::Circle(c, _) => c.get_rotation(),
@@ -83,13 +83,13 @@ impl Rotate for Object {
             Object::Geo(g, _) => g.get_rotation(),
         }
     }
-    fn set_rotation(&mut self, x_axis: &V2) {
+    fn set_rotation(&mut self, rotation: &Rot2) {
         match self {
-            Object::Mirror(m) => m.line_segment.set_rotation(x_axis),
-            Object::Circle(c, _) => c.set_rotation(x_axis),
-            Object::Rect(r, _) => r.set_rotation(x_axis),
-            Object::Lens(l, _) => l.l.set_rotation(x_axis),
-            Object::Geo(g, _) => g.set_rotation(x_axis),
+            Object::Mirror(m) => m.line_segment.set_rotation(rotation),
+            Object::Circle(c, _) => c.set_rotation(rotation),
+            Object::Rect(r, _) => r.set_rotation(rotation),
+            Object::Lens(l, _) => l.l.set_rotation(rotation),
+            Object::Geo(g, _) => g.set_rotation(rotation),
         }
     }
 }
@@ -168,7 +168,7 @@ impl Lens {
                 }
                 .get_geometry(),
                 origin,
-                V2::new(1., 0.),
+                Rot2::identity(),
             ),
         }
     }
