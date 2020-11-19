@@ -3,7 +3,7 @@ extern crate nalgebra as na;
 mod gui;
 mod framework;
 pub mod light_garden;
-pub mod wgpu_main;
+pub mod renderer;
 
 const WIDTH: u32 = 1800;
 const HEIGHT: u32 = 1000;

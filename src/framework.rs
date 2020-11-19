@@ -1,5 +1,5 @@
 
-use crate::wgpu_main::Renderer;
+use crate::renderer::Renderer;
 use crate::gui::Gui;
 #[cfg(target_arch = "wasm32")]
 use futures::task::LocalSpawn;
