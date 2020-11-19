@@ -140,6 +140,8 @@ impl Gui {
 
                         Gui::edit_blend(&mut ixs, &ui, app);
 
+                        Gui::edit_cutoff_color(&mut app.cutoff_color, &ui);
+
                         ui.text(im_str!("Frametime: {:?}", elapsed));
                         ui.text(im_str!("Average Trace Time: {}", app.get_trace_time()));
                     });
@@ -273,5 +275,18 @@ impl Gui {
         app.color_state_descriptor.alpha_blend.operation = blend_ops[ixs[5]];
         ix_changed |= ix != ixs[5];
         app.recreate_pipeline = ix_changed;
+    }
+
+    pub fn edit_cutoff_color(color: &mut Color, ui: &Ui) {
+      let mut rgb = (color[0] + color[1] + color[2]) / 3.;
+      Slider::new(im_str!("Cutoff RGB"))
+                .range(0.001..=0.05)
+                .build(&ui, &mut rgb);
+      color[0] = rgb;
+      color[1] = rgb;
+      color[2] = rgb;
+      Slider::new(im_str!("Cutoff Alpha"))
+                .range(0.001..=0.5)
+                .build(&ui, &mut color[3]);
     }
 }

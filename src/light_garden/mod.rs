@@ -28,6 +28,7 @@ pub struct LightGarden {
     pub mode: Mode,
     pub refractive_index: Float,
     pub chunk_size: usize,
+    pub cutoff_color: Color,
     trace_time_vd: VecDeque<f64>,
 }
 
@@ -62,6 +63,7 @@ impl LightGarden {
             num_rays: 2000,
             canvas_bounds,
             selected_color: [0.05, 0.05, 0.05, 0.01],
+            cutoff_color: [0.01; 4],
             ray_width: 1.0,
             mode: Mode::NoMode,
             refractive_index: 2.,
@@ -453,37 +455,41 @@ impl LightGarden {
                 return;
             }
             for (ray, color, refractive_index) in &trace_rays {
-                if color[0] < 0.001 && color[1] < 0.001 && color[3] < 0.001 {
-                    return;
+                if (color[0] < self.cutoff_color[0]
+                    && color[1] < self.cutoff_color[1]
+                    && color[2] < self.cutoff_color[2])
+                    || color[3] < self.cutoff_color[3]
+                {
+                    continue;
                 }
 
                 // find the nearest object
                 let mut nearest: Float = std::f64::MAX;
-                let mut nearest_index = None;
+                // (intersection point, normal, object index)
+                let mut nearest_target: Option<(P2, Normal, usize)> = None;
                 for (index, obj) in self.objects.iter().enumerate() {
                     if let Some(intersections) = ray.intersect(&obj.get_geometry()) {
-                        for (intersection, _) in intersections {
+                        for (intersection, normal) in intersections {
                             let dist_sq = distance_squared(&ray.get_origin(), &intersection);
                             if dist_sq < nearest {
                                 nearest = dist_sq;
-                                nearest_index = Some(index);
+                                nearest_target = Some((intersection, normal, index));
                             }
                         }
                     }
                 }
 
-                if let Some(index) = nearest_index {
+                if let Some((intersection, normal, index)) = nearest_target {
                     let obj = self.objects[index].clone();
                     match obj {
                         Object::Mirror(_) => {
-                            if let Some((reflected, _, i)) =
-                                ray.reflect_on_normal_intersect(&self.objects[index].get_geometry())
-                            {
-                                rays.push((ray.get_origin(), *color));
-                                rays.push((i, *color));
-                                back_buffer.push((reflected, *color, *refractive_index));
-                                // self.trace(rays, &reflected, *color, *refractive_index, max_bounce);
-                            }
+                            rays.push((ray.get_origin(), *color));
+                            rays.push((intersection, *color));
+                            back_buffer.push((
+                                ray.reflect(&intersection, &normal),
+                                *color,
+                                *refractive_index,
+                            ));
                         }
 
                         Object::Rect(_, material)
@@ -493,46 +499,39 @@ impl LightGarden {
                             let mut updated_refractive_index = 1.;
                             let result;
                             if obj.contains(&ray.get_origin()) {
-                                result = ray.refract_on(
-                                    &obj.get_geometry(),
+                                result = ray.refract(
+                                    &intersection,
+                                    &normal,
                                     material.refractive_index,
                                     1.,
                                 );
                             } else {
                                 updated_refractive_index = material.refractive_index;
-                                result = ray.refract_on(
-                                    &obj.get_geometry(),
+                                result = ray.refract(
+                                    &intersection,
+                                    &normal,
                                     *refractive_index,
                                     material.refractive_index,
                                 );
                             }
-                            if let Some((reflected, orefracted, reflectance)) = result {
-                                rays.push((ray.get_origin(), *color));
-                                rays.push((reflected.get_origin(), *color));
+                            let (reflected, orefracted, reflectance) = result;
+                            rays.push((ray.get_origin(), *color));
+                            rays.push((reflected.get_origin(), *color));
 
-                                let refl = reflectance as f32;
-                                let omrefl = 1. - refl;
-                                let color1 =
-                                    [color[0] * refl, color[1] * refl, color[2] * refl, color[3]];
-                                let color2 = [
-                                    color[0] * omrefl,
-                                    color[1] * omrefl,
-                                    color[2] * omrefl,
-                                    color[3],
-                                ];
-                                back_buffer.push((reflected, color1, *refractive_index));
-                                // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
-                                if let Some(refracted) = orefracted {
-                                    back_buffer.push((refracted, color2, updated_refractive_index));
-
-                                    // self.trace(
-                                    // rays,
-                                    // &refracted,
-                                    // color2,
-                                    // updated_refractive_index,
-                                    // max_bounce,
-                                    // );
-                                }
+                            let refl = reflectance as f32;
+                            let omrefl = 1. - refl;
+                            let color1 =
+                                [color[0] * refl, color[1] * refl, color[2] * refl, color[3]];
+                            let color2 = [
+                                color[0] * omrefl,
+                                color[1] * omrefl,
+                                color[2] * omrefl,
+                                color[3],
+                            ];
+                            back_buffer.push((reflected, color1, *refractive_index));
+                            // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
+                            if let Some(refracted) = orefracted {
+                                back_buffer.push((refracted, color2, updated_refractive_index));
                             }
                         }
                     }
