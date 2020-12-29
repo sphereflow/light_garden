@@ -7,15 +7,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-imgui = "0.5"
-imgui-wgpu = "0.11.0"
-imgui-winit-support = { version = "0.5", default-features = false, features = ["winit-22"] }
+imgui = "0.6"
+imgui-wgpu = "0.12.0"
+imgui-winit-support = { version = "0.6" }
 nalgebra = "0.23"
 rayon = "1.4.0"
-wgpu = "0.6.0"
+wgpu = "0.6"
 bytemuck = "1"
 log = "0.4"
-winit = { version = "0.22.2", features = ["web-sys"] }
+winit = { version = "0.24", features = ["web-sys"] }
 futures = { version = "0.3", default-features = false, features = ["std", "executor"] }
 cgmath = "0.17"
 

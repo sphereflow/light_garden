@@ -268,12 +268,10 @@ impl Renderer {
         );
 
         #[cfg(not(feature = "glsl-to-spirv"))]
-        let imgui_renderer = imgui_wgpu::Renderer::new(
-            &mut gui.imgui_context,
-            device,
-            queue,
-            imgui_wgpu::RendererConfig::new().set_texture_format(sc_desc.format),
-        );
+        let mut renderer_config = imgui_wgpu::RendererConfig::new();
+        renderer_config.texture_format = sc_desc.format;
+        let imgui_renderer =
+            imgui_wgpu::Renderer::new(&mut gui.imgui_context, device, queue, renderer_config);
 
         #[cfg(feature = "glsl-to-spirv")]
         let imgui_renderer =
