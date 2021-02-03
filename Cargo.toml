@@ -9,8 +9,8 @@ edition = "2018"
 [dependencies]
 imgui = "0.6"
 imgui-wgpu = "0.12.0"
-imgui-winit-support = { version = "0.6" }
-nalgebra = "0.23"
+imgui-winit-support = "0.6"
+nalgebra = "0.24"
 rayon = "1.4.0"
 wgpu = "0.6"
 bytemuck = "1"
