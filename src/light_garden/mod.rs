@@ -14,14 +14,14 @@ pub mod object;
 pub struct LightGarden {
     mouse_pos: Point2<Float>,
     pub lights: Vec<Light>,
-    pub max_bounce: i32,
+    pub max_bounce: u32,
     pub num_rays: u32,
     pub objects: Vec<Object>,
     drawing_object: Option<Object>,
     pub selected_object: Option<usize>,
     pub selected_light: Option<usize>,
     pub selected_color: Color,
-    pub color_state_descriptor: wgpu::ColorStateDescriptor,
+    pub color_state_descriptor: wgpu::ColorTargetState,
     pub recreate_pipeline: bool,
     pub canvas_bounds: Rect,
     pub ray_width: f64,
@@ -36,14 +36,24 @@ impl LightGarden {
     pub fn new(canvas_bounds: Rect, descriptor_format: wgpu::TextureFormat) -> LightGarden {
         let light = Light::PointLight(PointLight::new(Point2::new(-0.1, 0.1), 10000, [0.1; 4]));
         let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8, 5.);
-        let color_state_descriptor = wgpu::ColorStateDescriptor {
+        let mut cubic1 = CubicBezier::new_sample();
+        cubic1.scale(0.5, 0.5);
+        let curved_mirror1 = Object::CurvedMirror(CurvedMirror {
+            cubic: cubic1,
+        });
+        let mut cubic2 = CubicBezier::new_sample2();
+        cubic2.scale(0.5, 0.5);
+        let curved_mirror2 = Object::CurvedMirror(CurvedMirror {
+            cubic: cubic2,
+        });
+        let color_state_descriptor = wgpu::ColorTargetState {
             format: descriptor_format,
-            alpha_blend: wgpu::BlendDescriptor {
+            alpha_blend: wgpu::BlendState {
                 src_factor: wgpu::BlendFactor::SrcAlpha,
                 dst_factor: wgpu::BlendFactor::One,
                 operation: wgpu::BlendOperation::Add,
             },
-            color_blend: wgpu::BlendDescriptor {
+            color_blend: wgpu::BlendState {
                 src_factor: wgpu::BlendFactor::One,
                 dst_factor: wgpu::BlendFactor::One,
                 operation: wgpu::BlendOperation::Add,
@@ -53,7 +63,7 @@ impl LightGarden {
         LightGarden {
             mouse_pos: Point2::new(0., 0.),
             lights: vec![light],
-            objects: vec![lens],
+            objects: vec![lens, curved_mirror1, curved_mirror2],
             drawing_object: None,
             selected_object: None,
             selected_light: None,
@@ -347,8 +357,8 @@ impl LightGarden {
         all_line_strips
     }
 
-    pub fn trace_reflective(&self, rays: &mut Vec<P2>, ray: &Ray, color: Color, max_bounce: i32) {
-        if max_bounce <= 0 {
+    pub fn trace_reflective(&self, rays: &mut Vec<P2>, ray: &Ray, color: Color, max_bounce: u32) {
+        if max_bounce == 0 {
             return;
         }
         let mut refopt = None;
@@ -431,6 +441,19 @@ impl LightGarden {
         // ),
         // );
 
+        // draw control lines for cubic bezier curves
+        for obj in self.objects.iter() {
+          if let Object::CurvedMirror(cm) = obj {
+            let red = [1., 0., 0., 1.];
+            all_lines.push((cm.cubic.points[0], red));
+            all_lines.push((cm.cubic.points[1], red));
+            all_lines.push((cm.cubic.points[1], red));
+            all_lines.push((cm.cubic.points[2], red));
+            all_lines.push((cm.cubic.points[2], red));
+            all_lines.push((cm.cubic.points[3], red));
+          }
+        }
+
         self.trace_time_vd
             .push_back(instant_start.elapsed().as_micros() as f64 / 1000.0);
         if self.trace_time_vd.len() > 20 {
@@ -446,7 +469,7 @@ impl LightGarden {
         ray: &Ray,
         color: Color,
         refractive_index: Float,
-        max_bounce: i32,
+        max_bounce: u32,
     ) {
         let mut trace_rays = vec![(*ray, color, refractive_index)];
         let mut back_buffer = Vec::new();
@@ -482,7 +505,7 @@ impl LightGarden {
                 if let Some((intersection, normal, index)) = nearest_target {
                     let obj = self.objects[index].clone();
                     match obj {
-                        Object::Mirror(_) => {
+                        Object::Mirror(_) | Object::CurvedMirror(_) => {
                             rays.push((ray.get_origin(), *color));
                             rays.push((intersection, *color));
                             back_buffer.push((

@@ -1,7 +1,8 @@
 extern crate nalgebra as na;
 
-mod gui;
+pub mod egui_renderer;
 mod framework;
+mod gui;
 pub mod light_garden;
 pub mod renderer;
 

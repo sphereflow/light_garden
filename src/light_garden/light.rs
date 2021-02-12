@@ -34,6 +34,13 @@ impl Light {
             Light::SpotLight(l) => l.color,
         }
     }
+    pub fn set_color(&mut self, r: f32, g: f32, b: f32, a: f32) {
+        match self {
+            Light::PointLight(l) => l.set_color([r, g, b, a]),
+            Light::DirectionalLight(l) => l.set_color([r, g, b, a]),
+            Light::SpotLight(l) => l.set_color([r, g, b, a]),
+        }
+    }
     pub fn set_num_rays(&mut self, num_rays: u32) {
         match self {
             Light::PointLight(l) => l.set_num_rays(num_rays),
@@ -85,6 +92,10 @@ impl DirectionalLight {
         ret
     }
 
+    fn set_color(&mut self, color: Color) {
+        self.color = color;
+    }
+
     pub fn set_num_rays(&mut self, _num_rays: u32) {}
 }
 
@@ -115,6 +126,11 @@ impl PointLight {
         light.set_num_rays(num_rays);
         light
     }
+
+    fn set_color(&mut self, color: Color) {
+        self.color = color;
+    }
+
     pub fn set_num_rays(&mut self, num_rays: u32) {
         self.rays = Vec::with_capacity(num_rays as usize);
         for i in 0..num_rays {
@@ -165,6 +181,11 @@ impl SpotLight {
         light.set_num_rays(num_rays);
         light
     }
+
+    fn set_color(&mut self, color: Color) {
+        self.color = color;
+    }
+
     pub fn set_num_rays(&mut self, num_rays: u32) {}
 }
 
@@ -172,6 +193,7 @@ impl HasOrigin for SpotLight {
     fn get_origin(&self) -> P2 {
         self.position
     }
+
     fn set_origin(&mut self, origin: P2) {
         self.position = origin;
         for ray in self.rays.iter_mut() {

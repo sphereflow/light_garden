@@ -4,6 +4,7 @@ use crate::gui::Gui;
 #[cfg(target_arch = "wasm32")]
 use futures::task::LocalSpawn;
 #[cfg(not(target_arch = "wasm32"))]
+use futures_lite::future;
 use std::time::{Duration, Instant};
 use winit::{
     dpi::LogicalSize,
@@ -78,7 +79,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
 
     let adapter = instance
         .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::Default,
+            power_preference: wgpu::PowerPreference::HighPerformance,
             compatible_surface: Some(&surface),
         })
         .await
@@ -99,9 +100,9 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
+                label: None, 
                 features: (optional_features & adapter_features) | required_features,
                 limits: needed_limits,
-                shader_validation: true,
             },
             trace_dir.ok().as_ref().map(std::path::Path::new),
         )
@@ -132,12 +133,6 @@ fn start(
         queue,
     }: Setup,
 ) {
-    #[cfg(not(target_arch = "wasm32"))]
-    let (mut pool, spawner) = {
-        let local_pool = futures::executor::LocalPool::new();
-        let spawner = local_pool.spawner();
-        (local_pool, spawner)
-    };
 
     #[cfg(target_arch = "wasm32")]
     let spawner = {
@@ -170,13 +165,8 @@ fn start(
     };
 
     let mut sc_desc = wgpu::SwapChainDescriptor {
-        usage: wgpu::TextureUsage::OUTPUT_ATTACHMENT,
-        // TODO: Allow srgb unconditionally
-        format: if cfg!(target_arch = "wasm32") {
-            wgpu::TextureFormat::Bgra8Unorm
-        } else {
-            wgpu::TextureFormat::Bgra8UnormSrgb
-        },
+        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
+        format: adapter.get_swap_chain_preferred_format(&surface),
         width: size.width,
         height: size.height,
         present_mode: wgpu::PresentMode::Mailbox,
@@ -206,7 +196,6 @@ fn start(
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     window.request_redraw();
-                    pool.run_until_stalled();
                 }
 
                 #[cfg(target_arch = "wasm32")]
@@ -254,18 +243,18 @@ fn start(
                 };
 
 
-                renderer.render(&frame.output, &device, &queue, &mut gui,&window, &spawner);
+                renderer.render(&frame.output, &device, &queue, &mut gui);
 
             }
             _ => {}
         }
-        gui.platform.handle_event(gui.imgui_context.io_mut(), &window, &event);
+        gui.platform.handle_event(&event);
     });
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn wgpu_main(width: u32, height: u32) {
-    let setup = futures::executor::block_on(setup("LightGarden", width, height));
+    let setup = future::block_on(setup("LightGarden", width, height));
     start(setup);
 }
 

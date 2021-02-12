@@ -9,6 +9,7 @@
 
 use std::iter;
 
+use crate::egui_renderer::EguiRenderer;
 use crate::gui::Gui;
 use crate::light_garden::light::Color;
 use crate::light_garden::LightGarden;
@@ -27,7 +28,6 @@ struct Vertex {
     _pos: [f32; 2],
     _color: [f32; 4],
 }
-
 unsafe impl Pod for Vertex {}
 unsafe impl Zeroable for Vertex {}
 
@@ -42,10 +42,10 @@ pub struct Renderer {
     vertex_buffer: Buffer,
     vertex_count: u32,
     sample_count: u32,
-    bind_group: BindGroup,
+    matrix_bind_group: BindGroup,
     rebuild_bundle: bool,
     sc_desc: SwapChainDescriptor,
-    pub imgui_renderer: imgui_wgpu::Renderer,
+    egui_renderer: EguiRenderer,
     pub app: LightGarden,
 }
 
@@ -64,7 +64,7 @@ impl Renderer {
             &mut self.app,
         );
         self.pipeline = pipeline;
-        self.bind_group = bind_group;
+        self.matrix_bind_group = bind_group;
         let mut encoder = device.create_render_bundle_encoder(&RenderBundleEncoderDescriptor {
             label: None,
             color_formats: &[self.sc_desc.format],
@@ -75,7 +75,7 @@ impl Renderer {
         encoder.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
         encoder.draw(0..self.vertex_count, 0..1); // vertex range, instance range
         self.bundle = Some(encoder.finish(&RenderBundleDescriptor {
-            label: Some("main"),
+            label: Some("primitives render bundle"),
         }));
     }
 
@@ -93,8 +93,9 @@ impl Renderer {
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStage::VERTEX,
-                ty: wgpu::BindingType::UniformBuffer {
-                    dynamic: false,
+                ty: wgpu::BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
                     min_binding_size: wgpu::BufferSize::new(64),
                 },
                 count: None,
@@ -112,12 +113,16 @@ impl Renderer {
         app.canvas_bounds = Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64);
 
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("u_Transform"),
             layout: &bind_group_layout,
             entries: &[BindGroupEntry {
                 binding: 0,
-                resource: BindingResource::Buffer(mx_buf.slice(..)),
+                resource: BindingResource::Buffer {
+                    buffer: &mx_buf,
+                    offset: 0,
+                    size: None,
+                },
             }],
-            label: Some("u_Transform"),
         });
         queue.write_buffer(&mx_buf, 0, bytemuck::cast_slice(mx_ref));
 
@@ -128,36 +133,40 @@ impl Renderer {
         });
         (
             device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: None,
+                label: Some("render pipeline"),
                 layout: Some(&pipeline_layout),
-                vertex_stage: ProgrammableStageDescriptor {
+                vertex: VertexState {
                     module: &vs_module,
                     entry_point: "main",
-                },
-                fragment_stage: Some(ProgrammableStageDescriptor {
-                    module: &fs_module,
-                    entry_point: "main",
-                }),
-                rasterization_state: Some(RasterizationStateDescriptor {
-                    front_face: FrontFace::Ccw,
-                    cull_mode: CullMode::None,
-                    ..Default::default()
-                }),
-                // render lines
-                primitive_topology: PrimitiveTopology::LineList,
-                color_states: &[app.color_state_descriptor.clone()],
-                depth_stencil_state: None,
-                vertex_state: VertexStateDescriptor {
-                    index_format: IndexFormat::Uint16,
-                    vertex_buffers: &[VertexBufferDescriptor {
-                        stride: std::mem::size_of::<Vertex>() as BufferAddress,
-                        step_mode: InputStepMode::Vertex,
-                        attributes: &vertex_attr_array![0 => Float2, 1 => Float4],
+                    buffers: &[wgpu::VertexBufferLayout {
+                        array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                        step_mode: wgpu::InputStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float4],
                     }],
                 },
-                sample_count,
-                sample_mask: !0,
-                alpha_to_coverage_enabled: false,
+                fragment: Some(FragmentState {
+                    module: &fs_module,
+                    entry_point: "main",
+                    targets: &[app.color_state_descriptor.clone()],
+                }),
+                // render lines
+                primitive: PrimitiveState {
+                    topology: PrimitiveTopology::LineList,
+                    front_face: FrontFace::Ccw,
+                    ..Default::default()
+                },
+                depth_stencil: None,
+                // vertex_state: VertexStateDescriptor {
+                // index_format: IndexFormat::Uint16,
+                // vertex_buffers: &[VertexBufferDescriptor {
+                // stride: std::mem::size_of::<Vertex>() as BufferAddress,
+                // step_mode: InputStepMode::Vertex,
+                // attributes: &vertex_attr_array![0 => Float2, 1 => Float4],
+                // }],
+                // },
+                multisample: MultisampleState {
+                    ..Default::default()
+                },
             }),
             bind_group,
         )
@@ -179,7 +188,7 @@ impl Renderer {
             sample_count,
             dimension: TextureDimension::D2,
             format: sc_desc.format,
-            usage: TextureUsage::OUTPUT_ATTACHMENT,
+            usage: TextureUsage::RENDER_ATTACHMENT,
             label: None,
         };
 
@@ -242,8 +251,8 @@ impl Renderer {
         let sample_count = 1;
 
         // load vertex  an fragment shaders
-        let vs_module = device.create_shader_module(include_spirv!("shader.vert.spv"));
-        let fs_module = device.create_shader_module(include_spirv!("shader.frag.spv"));
+        let vs_module = device.create_shader_module(&include_spirv!("shader.vert.spv"));
+        let fs_module = device.create_shader_module(&include_spirv!("shader.frag.spv"));
 
         let multisampled_framebuffer: TextureView =
             Renderer::create_multisampled_framebuffer(device, sc_desc, sample_count);
@@ -267,16 +276,6 @@ impl Renderer {
             &mut app,
         );
 
-        #[cfg(not(feature = "glsl-to-spirv"))]
-        let mut renderer_config = imgui_wgpu::RendererConfig::new();
-        renderer_config.texture_format = sc_desc.format;
-        let imgui_renderer =
-            imgui_wgpu::Renderer::new(&mut gui.imgui_context, device, queue, renderer_config);
-
-        #[cfg(feature = "glsl-to-spirv")]
-        let imgui_renderer =
-            imgui_wgpu::Renderer::new_glsl(&mut imgui, &device, &mut queue, sc_desc.format);
-
         let mut example = Renderer {
             bundle: None, // bundle will be initialized bellow
             vs_module,    // vertex shader
@@ -286,16 +285,15 @@ impl Renderer {
             vertex_buffer,
             vertex_count,
             sample_count,
-            bind_group,
+            matrix_bind_group: bind_group,
             rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
             sc_desc: sc_desc.clone(),
-            imgui_renderer,
+            egui_renderer: EguiRenderer::init(device, sc_desc.format),
             app,
         };
         example.create_bundle(device, queue);
         example
     }
-
     pub fn update(&mut self, event: &winit::event::WindowEvent) {
         match event {
             winit::event::WindowEvent::KeyboardInput { input, .. } => {
@@ -383,7 +381,7 @@ impl Renderer {
             &mut self.app,
         );
         self.pipeline = pipeline;
-        self.bind_group = bind_group;
+        self.matrix_bind_group = bind_group;
         self.multisampled_framebuffer =
             Renderer::create_multisampled_framebuffer(device, sc_desc, self.sample_count);
     }
@@ -394,18 +392,19 @@ impl Renderer {
         device: &Device,
         queue: &Queue,
         gui: &mut Gui,
-        window: &winit::window::Window,
-        _spawner: &impl futures::task::LocalSpawn,
     ) {
-        let ui = gui.gui(&window, &mut self.app);
         let vb = self.app.trace_all();
         // self.update_vertex_buffer_with_line_strips(device, &vb);
         self.update_vertex_buffer(device, &vb);
 
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor { label: None });
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("Command Encoder"),
+        });
 
         {
-            let mut rpass_imgui = encoder.begin_render_pass(&RenderPassDescriptor {
+            // setup render pass
+            let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("egui_rpass: RenderPassDescriptor"),
                 color_attachments: &[RenderPassColorAttachmentDescriptor {
                     attachment: &frame.view,
                     resolve_target: None,
@@ -427,18 +426,23 @@ impl Renderer {
                     &mut self.app,
                 );
                 self.pipeline = pipeline;
-                self.bind_group = bind_group;
+                self.matrix_bind_group = bind_group;
             }
-            rpass_imgui.set_bind_group(0, &self.bind_group, &[]);
-            rpass_imgui.set_pipeline(&self.pipeline);
-            rpass_imgui.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
-            rpass_imgui.draw(0..self.vertex_count, 0..1); // vertex range, instance range
+            rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
+            rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
 
-            self.imgui_renderer
-                .render(ui.render(), &queue, &device, &mut rpass_imgui)
-                .expect("Rendering failed");
+            // egui renders here
         }
-
         queue.submit(iter::once(encoder.finish()));
+        self.egui_renderer.render(
+            device,
+            queue,
+            &self.sc_desc,
+            &frame.view,
+            gui,
+            &mut self.app,
+        );
     }
 }
