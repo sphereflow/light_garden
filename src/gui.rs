@@ -130,7 +130,7 @@ impl Gui {
                         egui::widgets::color_picker::color_edit_button_srgba(
                             ui,
                             &mut color,
-                            color_picker::Alpha::BlendOrAdditive,
+                            color_picker::Alpha::OnlyBlend,
                         );
                         let rgba = Rgba::from(color);
                         app.selected_color = [rgba[0], rgba[1], rgba[2], rgba[3]];
@@ -162,7 +162,7 @@ impl Gui {
         egui::widgets::color_picker::color_edit_button_srgba(
             ui,
             &mut color,
-            color_picker::Alpha::Opaque,
+            color_picker::Alpha::OnlyBlend,
         );
         let rgba = Rgba::from(color);
         light.set_color(rgba[0], rgba[1], rgba[2], rgba[3]);
