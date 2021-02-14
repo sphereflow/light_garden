@@ -16,7 +16,7 @@ chrono = "0.4"
 futures-lite = "1.11"
 egui = "0.9"
 epi = "0.9"
-egui_winit_platform = { path = "../egui_winit_platform"}
+egui_winit_platform = {git = "https://github.com/hasenbanck/egui_winit_platform"}
 winit = { version = "0.24", features = ["web-sys"] }
 cgmath = "0.17"
 
