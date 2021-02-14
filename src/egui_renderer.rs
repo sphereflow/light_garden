@@ -267,6 +267,36 @@ impl EguiRenderer {
         }
     }
 
+    /// Updates the buffers used by egui. Will properly re-size the buffers if needed.
+    fn update_buffer(
+        &mut self,
+        device: &wgpu::Device,
+        queue: &wgpu::Queue,
+        buffer_type: BufferType,
+        index: usize,
+        data: &[u8],
+    ) {
+        let (buffer, storage, name) = match buffer_type {
+            BufferType::Index => (&mut self.index_buffers[index], BufferUsage::INDEX, "index"),
+            BufferType::Vertex => (
+                &mut self.vertex_buffers[index],
+                BufferUsage::VERTEX,
+                "vertex",
+            ),
+            BufferType::Uniform => (&mut self.uniform_buffer, BufferUsage::UNIFORM, "uniform"),
+        };
+
+        if data.len() > buffer.size {
+            buffer.buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some(format!("egui_{}_buffer", name).as_str()),
+                contents: bytemuck::cast_slice(data),
+                usage: storage | wgpu::BufferUsage::COPY_DST,
+            });
+        } else {
+            queue.write_buffer(&buffer.buffer, 0, data);
+        }
+    }
+
     pub fn update_texture(
         &mut self,
         device: &wgpu::Device,
@@ -379,36 +409,6 @@ impl EguiRenderer {
         }
     }
 
-    /// Updates the buffers used by egui. Will properly re-size the buffers if needed.
-    fn update_buffer(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-        buffer_type: BufferType,
-        index: usize,
-        data: &[u8],
-    ) {
-        let (buffer, storage, name) = match buffer_type {
-            BufferType::Index => (&mut self.index_buffers[index], BufferUsage::INDEX, "index"),
-            BufferType::Vertex => (
-                &mut self.vertex_buffers[index],
-                BufferUsage::VERTEX,
-                "vertex",
-            ),
-            BufferType::Uniform => (&mut self.uniform_buffer, BufferUsage::UNIFORM, "uniform"),
-        };
-
-        if data.len() > buffer.size {
-            buffer.buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(format!("egui_{}_buffer", name).as_str()),
-                contents: bytemuck::cast_slice(data),
-                usage: storage | wgpu::BufferUsage::COPY_DST,
-            });
-        } else {
-            queue.write_buffer(&buffer.buffer, 0, data);
-        }
-    }
-
     pub fn render(
         &mut self,
         device: &Device,
@@ -420,7 +420,7 @@ impl EguiRenderer {
     ) {
         let clipped_meshes = gui.gui(app);
         self.update_texture(device, queue, gui.platform.context().texture());
-        self.update_user_textures(device, queue);
+        // self.update_user_textures(device, queue);
         self.update_buffers(
             device,
             queue,
@@ -455,55 +455,15 @@ impl EguiRenderer {
                 .zip(self.vertex_buffers.iter())
                 .zip(self.index_buffers.iter())
             {
-                // Transform clip rect to physical pixels.
-                let clip_min_x = scale_factor * clip_rect.min.x;
-                let clip_min_y = scale_factor * clip_rect.min.y;
-                let clip_max_x = scale_factor * clip_rect.max.x;
-                let clip_max_y = scale_factor * clip_rect.max.y;
-
-                // Make sure clip rect can fit within an `u32`.
-                let clip_min_x = egui::clamp(clip_min_x, 0.0..=physical_width as f32);
-                let clip_min_y = egui::clamp(clip_min_y, 0.0..=physical_height as f32);
-                let clip_max_x = egui::clamp(clip_max_x, clip_min_x..=physical_width as f32);
-                let clip_max_y = egui::clamp(clip_max_y, clip_min_y..=physical_height as f32);
-
-                let clip_min_x = clip_min_x.round() as u32;
-                let clip_min_y = clip_min_y.round() as u32;
-                let clip_max_x = clip_max_x.round() as u32;
-                let clip_max_y = clip_max_y.round() as u32;
-
-                let width = (clip_max_x - clip_min_x).max(1);
-                let height = (clip_max_y - clip_min_y).max(1);
-
-                {
-                    // clip scissor rectangle to target size
-                    let x = clip_min_x.min(physical_width);
-                    let y = clip_min_y.min(physical_height);
-                    let width = width.min(physical_width - x);
-                    let height = height.min(physical_height - y);
-
-                    // skip rendering with zero-sized clip areas
-                    if width == 0 || height == 0 {
-                        continue;
-                    }
-
-                    rpass.set_scissor_rect(x, y, width, height);
+                if !EguiRenderer::set_clip_rect(
+                    clip_rect,
+                    scale_factor,
+                    physical_width,
+                    physical_height,
+                    &mut rpass,
+                ) {
+                    continue;
                 }
-                let texture_bind_group = match triangles.texture_id {
-                    egui::TextureId::Egui => self
-                        .texture_bind_group
-                        .as_ref()
-                        .expect("egui texture was not set before the first draw"),
-                    egui::TextureId::User(id) => {
-                        let id = id as usize;
-                        assert!(id < self.user_textures.len());
-                        self.user_textures
-                            .get(id)
-                            .unwrap_or_else(|| panic!("user texture {} not found", id))
-                            .as_ref()
-                            .unwrap_or_else(|| panic!("user texture {} freed", id))
-                    }
-                };
                 rpass.set_bind_group(1, self.get_texture_bind_group(triangles.texture_id), &[]);
 
                 rpass.set_index_buffer(index_buffer.buffer.slice(..), wgpu::IndexFormat::Uint32);
@@ -512,6 +472,51 @@ impl EguiRenderer {
             }
         }
         queue.submit(iter::once(encoder.finish()));
+    }
+
+    /// returns if the area of the clip rect is non zero
+    fn set_clip_rect(
+        clip_rect: &egui::Rect,
+        scale_factor: f32,
+        physical_width: u32,
+        physical_height: u32,
+        rpass: &mut wgpu::RenderPass,
+    ) -> bool {
+        // Transform clip rect to physical pixels.
+        let clip_min_x = scale_factor * clip_rect.min.x;
+        let clip_min_y = scale_factor * clip_rect.min.y;
+        let clip_max_x = scale_factor * clip_rect.max.x;
+        let clip_max_y = scale_factor * clip_rect.max.y;
+
+        // Make sure clip rect can fit within an `u32`.
+        // let clip_min_x = clip_min_x.clamp(0., physical_width as f32);
+        // let clip_min_y = clip_min_y.clamp(0., physical_height as f32);
+        // let clip_max_x = clip_max_x.clamp(clip_min_x, physical_width as f32);
+        // let clip_max_y = clip_max_y.clamp(clip_min_y, physical_height as f32);
+
+        let clip_min_x = clip_min_x.round() as u32;
+        let clip_min_y = clip_min_y.round() as u32;
+        let clip_max_x = clip_max_x.round() as u32;
+        let clip_max_y = clip_max_y.round() as u32;
+
+        let width = (clip_max_x - clip_min_x).max(1);
+        let height = (clip_max_y - clip_min_y).max(1);
+
+        {
+            // clip scissor rectangle to target size
+            let x = clip_min_x.min(physical_width);
+            let y = clip_min_y.min(physical_height);
+            let width = width.min(physical_width - x);
+            let height = height.min(physical_height - y);
+
+            // skip rendering with zero-sized clip areas
+            if width == 0 || height == 0 {
+                return false;
+            }
+
+            rpass.set_scissor_rect(x, y, width, height);
+            true
+        }
     }
 }
 
