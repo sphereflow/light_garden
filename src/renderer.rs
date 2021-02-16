@@ -35,8 +35,7 @@ type Key = event::VirtualKeyCode;
 
 pub struct Renderer {
     bundle: Option<RenderBundle>,
-    vs_module: ShaderModule,
-    fs_module: ShaderModule,
+    shader: ShaderModule,
     pipeline: RenderPipeline,
     multisampled_framebuffer: TextureView,
     vertex_buffer: Buffer,
@@ -58,9 +57,7 @@ impl Renderer {
             &self.sc_desc,
             device,
             queue,
-            &self.vs_module,
-            &self.fs_module,
-            self.sample_count,
+            &self.shader,
             &mut self.app,
         );
         self.pipeline = pipeline;
@@ -83,9 +80,7 @@ impl Renderer {
         sc_desc: &SwapChainDescriptor,
         device: &Device,
         queue: &Queue,
-        vs_module: &ShaderModule,
-        fs_module: &ShaderModule,
-        sample_count: u32,
+        shader: &ShaderModule,
         app: &mut LightGarden,
     ) -> (RenderPipeline, BindGroup) {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -136,8 +131,8 @@ impl Renderer {
                 label: Some("render pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: VertexState {
-                    module: &vs_module,
-                    entry_point: "main",
+                    module: &shader,
+                    entry_point: "vs_main",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                         step_mode: wgpu::InputStepMode::Vertex,
@@ -145,8 +140,8 @@ impl Renderer {
                     }],
                 },
                 fragment: Some(FragmentState {
-                    module: &fs_module,
-                    entry_point: "main",
+                    module: &shader,
+                    entry_point: "fs_main",
                     targets: &[app.color_state_descriptor.clone()],
                 }),
                 // render lines
@@ -244,15 +239,26 @@ impl Renderer {
     pub fn init(
         sc_desc: &SwapChainDescriptor,
         device: &Device,
-        gui: &mut Gui,
+        adapter: &Adapter,
         queue: &Queue, // we might need to meddle with the command queue
     ) -> Self {
         log::info!("Press left/right arrow keys to change sample_count.");
         let sample_count = 1;
 
-        // load vertex  an fragment shaders
-        let vs_module = device.create_shader_module(&include_spirv!("shader.vert.spv"));
-        let fs_module = device.create_shader_module(&include_spirv!("shader.frag.spv"));
+        let mut flags = wgpu::ShaderFlags::VALIDATION;
+        match adapter.get_info().backend {
+            wgpu::Backend::Metal | wgpu::Backend::Vulkan => {
+                flags |= wgpu::ShaderFlags::EXPERIMENTAL_TRANSLATION
+            }
+            _ => (), //TODO
+        }
+
+        use std::borrow::Cow;
+        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: None,
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
+            flags,
+        });
 
         let multisampled_framebuffer: TextureView =
             Renderer::create_multisampled_framebuffer(device, sc_desc, sample_count);
@@ -270,16 +276,13 @@ impl Renderer {
             &sc_desc,
             device,
             queue,
-            &vs_module,
-            &fs_module,
-            sample_count,
+            &shader,
             &mut app,
         );
 
         let mut example = Renderer {
             bundle: None, // bundle will be initialized bellow
-            vs_module,    // vertex shader
-            fs_module,    // fragment shader
+            shader,
             pipeline,
             multisampled_framebuffer, // there should be nothing in here yet
             vertex_buffer,
@@ -375,9 +378,7 @@ impl Renderer {
             &self.sc_desc,
             device,
             queue,
-            &self.vs_module,
-            &self.fs_module,
-            self.sample_count,
+            &self.shader,
             &mut self.app,
         );
         self.pipeline = pipeline;
@@ -420,9 +421,7 @@ impl Renderer {
                     &self.sc_desc,
                     device,
                     queue,
-                    &self.vs_module,
-                    &self.fs_module,
-                    self.sample_count,
+                    &self.shader,
                     &mut self.app,
                 );
                 self.pipeline = pipeline;

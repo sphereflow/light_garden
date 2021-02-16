@@ -1,10 +1,9 @@
 
 use crate::renderer::Renderer;
 use crate::gui::Gui;
-#[cfg(target_arch = "wasm32")]
-use futures::task::LocalSpawn;
 #[cfg(not(target_arch = "wasm32"))]
 use futures_lite::future;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::{Duration, Instant};
 use winit::{
     dpi::LogicalSize,
@@ -50,13 +49,10 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     #[cfg(not(target_arch = "wasm32"))]
     {
         let chrome_tracing_dir = std::env::var("WGPU_CHROME_TRACE");
-        subscriber::initialize_default_subscriber(
+        wgpu_subscriber::initialize_default_subscriber(
             chrome_tracing_dir.as_ref().map(std::path::Path::new).ok(),
         );
     };
-
-    #[cfg(target_arch = "wasm32")]
-    console_log::init().expect("could not initialize logger");
 
     let event_loop = EventLoop::new();
     let mut builder = winit::window::WindowBuilder::new().with_inner_size(LogicalSize::new(width as f32, height as f32));
@@ -68,9 +64,25 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     }
     let window = builder.build(&event_loop).unwrap();
 
+    #[cfg(target_arch = "wasm32")]
+    {
+        use winit::platform::web::WindowExtWebSys;
+        console_log::init().expect("could not initialize logger");
+        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
+        // On wasm, append the canvas to the document body
+        web_sys::window()
+            .and_then(|win| win.document())
+            .and_then(|doc| doc.body())
+            .and_then(|body| {
+                body.append_child(&web_sys::Element::from(window.canvas()))
+                    .ok()
+            })
+            .expect("couldn't append canvas to document body");
+    }
+
     log::info!("Initializing the surface...");
 
-    let instance = wgpu::Instance::new(wgpu::BackendBit::PRIMARY);
+    let instance = wgpu::Instance::new(wgpu::BackendBit::all());
     let (size, surface) = unsafe {
         let size = window.inner_size();
         let surface = instance.create_surface(&window);
@@ -83,7 +95,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
             compatible_surface: Some(&surface),
         })
         .await
-        .unwrap();
+        .expect("No suitable GPU found");
 
     let optional_features = wgpu::Features::empty();
     let required_features = wgpu::Features::empty();
@@ -107,7 +119,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
             trace_dir.ok().as_ref().map(std::path::Path::new),
         )
         .await
-        .unwrap();
+        .expect("Cannot request GPU device");
 
     Setup {
         window,
@@ -133,37 +145,6 @@ fn start(
         queue,
     }: Setup,
 ) {
-
-    #[cfg(target_arch = "wasm32")]
-    let spawner = {
-        use futures::{future::LocalFutureObj, task::SpawnError};
-        use winit::platform::web::WindowExtWebSys;
-
-        struct WebSpawner {}
-        impl LocalSpawn for WebSpawner {
-            fn spawn_local_obj(
-                &self,
-                future: LocalFutureObj<'static, ()>,
-            ) -> Result<(), SpawnError> {
-                Ok(wasm_bindgen_futures::spawn_local(future))
-            }
-        }
-
-        std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-
-        // On wasm, append the canvas to the document body
-        web_sys::window()
-            .and_then(|win| win.document())
-            .and_then(|doc| doc.body())
-            .and_then(|body| {
-                body.append_child(&web_sys::Element::from(window.canvas()))
-                    .ok()
-            })
-            .expect("couldn't append canvas to document body");
-
-        WebSpawner {}
-    };
-
     let mut sc_desc = wgpu::SwapChainDescriptor {
         usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
         format: adapter.get_swap_chain_preferred_format(&surface),
@@ -175,7 +156,7 @@ fn start(
 
     log::info!("Initializing the example...");
     let mut gui = Gui::new(&window); 
-    let mut renderer = Renderer::init(&sc_desc, &device,&mut gui, &queue);
+    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue);
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
@@ -261,7 +242,7 @@ pub fn wgpu_main(width: u32, height: u32) {
 #[cfg(target_arch = "wasm32")]
 pub fn wgpu_main(width: u32, height: u32) {
     wasm_bindgen_futures::spawn_local(async move {
-        let setup = setup("LightGarden").await;
+        let setup = setup("LightGarden", width, height).await;
         start(setup);
     });
 }

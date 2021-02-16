@@ -29,13 +29,9 @@ enum BufferType {
     Vertex,
 }
 
-const OUTPUT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8UnormSrgb;
-
 pub struct EguiRenderer {
     // egui stuff
     /// used to communicate the screen space coordinates to the shaders
-    vs_module: ShaderModule,
-    fs_module: ShaderModule,
     render_pipeline: RenderPipeline,
     uniform_buffer: SizedBuffer,
     uniform_bind_group: BindGroup,
@@ -159,7 +155,7 @@ impl EguiRenderer {
                 cull_mode: wgpu::CullMode::default(),
                 front_face: wgpu::FrontFace::default(),
                 polygon_mode: wgpu::PolygonMode::default(),
-                strip_index_format: Some(wgpu::IndexFormat::Uint32),
+                strip_index_format: None,
             },
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
@@ -188,8 +184,6 @@ impl EguiRenderer {
         });
 
         EguiRenderer {
-            vs_module,
-            fs_module,
             render_pipeline,
             vertex_buffers: Vec::new(),
             index_buffers: Vec::new(),

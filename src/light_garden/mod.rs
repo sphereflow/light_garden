@@ -6,6 +6,7 @@ use na::{distance, Point2};
 pub use object::*;
 use rayon::prelude::*;
 use std::collections::VecDeque;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 
 pub mod light;
@@ -38,14 +39,10 @@ impl LightGarden {
         let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8, 5.);
         let mut cubic1 = CubicBezier::new_sample();
         cubic1.scale(0.5, 0.5);
-        let curved_mirror1 = Object::CurvedMirror(CurvedMirror {
-            cubic: cubic1,
-        });
+        let curved_mirror1 = Object::CurvedMirror(CurvedMirror { cubic: cubic1 });
         let mut cubic2 = CubicBezier::new_sample2();
         cubic2.scale(0.5, 0.5);
-        let curved_mirror2 = Object::CurvedMirror(CurvedMirror {
-            cubic: cubic2,
-        });
+        let curved_mirror2 = Object::CurvedMirror(CurvedMirror { cubic: cubic2 });
         let color_state_descriptor = wgpu::ColorTargetState {
             format: descriptor_format,
             alpha_blend: wgpu::BlendState {
@@ -391,6 +388,7 @@ impl LightGarden {
     }
 
     pub fn trace_all(&mut self) -> Vec<(P2, Color)> {
+        #[cfg(not(target_arch = "wasm32"))]
         let instant_start = Instant::now();
         if let Some(dro) = self.drawing_object.clone() {
             self.objects.push(dro);
@@ -443,21 +441,24 @@ impl LightGarden {
 
         // draw control lines for cubic bezier curves
         for obj in self.objects.iter() {
-          if let Object::CurvedMirror(cm) = obj {
-            let red = [1., 0., 0., 1.];
-            all_lines.push((cm.cubic.points[0], red));
-            all_lines.push((cm.cubic.points[1], red));
-            all_lines.push((cm.cubic.points[1], red));
-            all_lines.push((cm.cubic.points[2], red));
-            all_lines.push((cm.cubic.points[2], red));
-            all_lines.push((cm.cubic.points[3], red));
-          }
+            if let Object::CurvedMirror(cm) = obj {
+                let red = [1., 0., 0., 1.];
+                all_lines.push((cm.cubic.points[0], red));
+                all_lines.push((cm.cubic.points[1], red));
+                all_lines.push((cm.cubic.points[1], red));
+                all_lines.push((cm.cubic.points[2], red));
+                all_lines.push((cm.cubic.points[2], red));
+                all_lines.push((cm.cubic.points[3], red));
+            }
         }
 
-        self.trace_time_vd
-            .push_back(instant_start.elapsed().as_micros() as f64 / 1000.0);
-        if self.trace_time_vd.len() > 20 {
-            self.trace_time_vd.pop_front();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.trace_time_vd
+                .push_back(instant_start.elapsed().as_micros() as f64 / 1000.0);
+            if self.trace_time_vd.len() > 20 {
+                self.trace_time_vd.pop_front();
+            }
         }
 
         all_lines

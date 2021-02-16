@@ -3,26 +3,14 @@ use collision2d::geo::*;
 use egui::*;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use epi::*;
+#[cfg(not(target_arch = "wasm32"))]
 use std::time::Instant;
 use wgpu::{BlendFactor, BlendOperation};
-
-enum Event {
-    RequestRedraw,
-}
-
-/// This is the repaint signal type that egui needs for requesting a repaint from another thread.
-/// It sends the custom RequestRedraw event to the winit event loop.
-struct LightGardenRepaintSignal(std::sync::Mutex<winit::event_loop::EventLoopProxy<Event>>);
-
-impl epi::RepaintSignal for LightGardenRepaintSignal {
-    fn request_repaint(&self) {
-        self.0.lock().unwrap().send_event(Event::RequestRedraw).ok();
-    }
-}
 
 pub struct Gui {
     pub platform: Platform,
     pub scale_factor: f32,
+    #[cfg(not(target_arch = "wasm32"))]
     last_update_inst: Instant,
     last_cursor: Option<Pos2>,
 }
@@ -37,19 +25,20 @@ impl Gui {
             font_definitions: FontDefinitions::default(),
             style: Default::default(),
         });
-
         #[cfg(not(target_arch = "wasm32"))]
         let last_update_inst = Instant::now();
 
         Gui {
             platform,
             scale_factor: winit_window.scale_factor() as f32,
+            #[cfg(not(target_arch = "wasm32"))]
             last_update_inst,
             last_cursor: None,
         }
     }
 
     pub fn gui(&mut self, app: &mut LightGarden) -> Vec<ClippedMesh> {
+        #[cfg(not(target_arch = "wasm32"))]
         let elapsed = self.last_update_inst.elapsed();
         self.platform.begin_frame();
         let ctx = self.platform.context();
@@ -140,11 +129,18 @@ impl Gui {
 
                     Gui::edit_cutoff_color(&mut app.cutoff_color, ui);
 
-                    ui.label(format!("Frametime: {:?}", elapsed));
-                    ui.label(format!("Average Trace Time: {}", app.get_trace_time()));
+                    #[cfg(not(target_arch = "wasm32"))]
+                    {
+                        ui.label(format!("Frametime: {:?}", elapsed));
+                        ui.label(format!("Average Trace Time: {}", app.get_trace_time()));
+                    }
                 });
         }
-        self.last_update_inst = Instant::now();
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.last_update_inst = Instant::now();
+        }
 
         let (_output, paint_commands) = self.platform.end_frame();
         ctx.tessellate(paint_commands)

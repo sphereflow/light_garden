@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 nalgebra = "0.24"
 rayon = "1.4.0"
-wgpu = "0.7"
+wgpu = { version = "0.7", features = ["webgl"] }
 bytemuck = "1"
 log = "0.4"
 chrono = "0.4"
@@ -20,9 +20,18 @@ egui_winit_platform = {git = "https://github.com/hasenbanck/egui_winit_platform"
 winit = { version = "0.24", features = ["web-sys"] }
 cgmath = "0.17"
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies.subscriber]
-package = "wgpu-subscriber"
-version = "0.1"
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+wgpu-subscriber = "0.1"
+pollster = "0.2"
+async-executor = "1.0"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2.69"
+wasm-bindgen-futures = "0.4.19"
+console_error_panic_hook = "0.1.6"
+console_log = "0.1.2"
+web-sys = "0.3.46"
+js-sys = "0.3.46"
 
 [dependencies.collision2d]
 path = "../collision2d"
