@@ -271,6 +271,7 @@ dependencies = [
 [[package]]
 name = "collision2d"
 version = "0.1.0"
+source = "git+https://github.com/sphereflow/collision2d#3ef19dc4caecd58c5d51142b35304cd1c1cb2d68"
 dependencies = [
  "nalgebra",
  "rand 0.7.3",

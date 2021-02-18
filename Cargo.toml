@@ -34,4 +34,4 @@ web-sys = "0.3.46"
 js-sys = "0.3.46"
 
 [dependencies.collision2d]
-path = "../collision2d"
+git = "https://github.com/sphereflow/collision2d"
