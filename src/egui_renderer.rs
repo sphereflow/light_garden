@@ -1,6 +1,5 @@
 use crate::framework::cast_slice;
 use crate::gui::Gui;
-use crate::light_garden::LightGarden;
 use bytemuck::{Pod, Zeroable};
 use egui::*;
 use std::iter;
@@ -410,9 +409,8 @@ impl EguiRenderer {
         sc_desc: &SwapChainDescriptor,
         color_attachment: &TextureView,
         gui: &mut Gui,
-        app: &mut LightGarden,
     ) {
-        let clipped_meshes = gui.gui(app);
+        let clipped_meshes = gui.gui();
         self.update_texture(device, queue, gui.platform.context().texture());
         // self.update_user_textures(device, queue);
         self.update_buffers(

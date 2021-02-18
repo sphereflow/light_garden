@@ -155,8 +155,8 @@ fn start(
     let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
     log::info!("Initializing the example...");
-    let mut gui = Gui::new(&window); 
-    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue);
+    let mut gui = Gui::new(&window, &sc_desc); 
+    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, &mut gui.app);
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
@@ -190,7 +190,7 @@ fn start(
                 log::info!("Resizing to {:?}", size);
                 sc_desc.width = if size.width == 0 { 1 } else { size.width };
                 sc_desc.height = if size.height == 0 { 1 } else { size.height };
-                renderer.resize(&sc_desc, &device, &queue);
+                renderer.resize(&sc_desc, &device, &queue, &mut gui.app);
                 swap_chain = device.create_swap_chain(&surface, &sc_desc);
             }
             event::Event::WindowEvent { ref event, .. } => match event {
@@ -208,7 +208,7 @@ fn start(
                 }
 
                 _ => {
-                    renderer.update(event);
+                    gui.update(event, &sc_desc);
                 }
             },
 

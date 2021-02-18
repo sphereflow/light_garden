@@ -13,14 +13,10 @@ use crate::egui_renderer::EguiRenderer;
 use crate::gui::Gui;
 use crate::light_garden::light::Color;
 use crate::light_garden::LightGarden;
-use crate::light_garden::Mode;
 use bytemuck::{Pod, Zeroable};
 use collision2d::geo::*;
-use na::Point2;
 use wgpu::util::DeviceExt;
 use wgpu::*;
-use winit::event;
-use winit::event::WindowEvent;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -30,8 +26,6 @@ struct Vertex {
 }
 unsafe impl Pod for Vertex {}
 unsafe impl Zeroable for Vertex {}
-
-type Key = event::VirtualKeyCode;
 
 pub struct Renderer {
     bundle: Option<RenderBundle>,
@@ -45,21 +39,15 @@ pub struct Renderer {
     rebuild_bundle: bool,
     sc_desc: SwapChainDescriptor,
     egui_renderer: EguiRenderer,
-    pub app: LightGarden,
 }
 
 impl Renderer {
     // this function is called by Example::init(...) and Example::render(...)
     // encoder.finish(...) creates a RenderBundle
-    fn create_bundle(&mut self, device: &Device, queue: &Queue) {
+    fn create_bundle(&mut self, device: &Device, queue: &Queue, app: &mut LightGarden) {
         log::info!("sample_count: {}", self.sample_count);
-        let (pipeline, bind_group) = Renderer::create_pipeline(
-            &self.sc_desc,
-            device,
-            queue,
-            &self.shader,
-            &mut self.app,
-        );
+        let (pipeline, bind_group) =
+            Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, app);
         self.pipeline = pipeline;
         self.matrix_bind_group = bind_group;
         let mut encoder = device.create_render_bundle_encoder(&RenderBundleEncoderDescriptor {
@@ -241,6 +229,7 @@ impl Renderer {
         device: &Device,
         adapter: &Adapter,
         queue: &Queue, // we might need to meddle with the command queue
+        app: &mut LightGarden,
     ) -> Self {
         log::info!("Press left/right arrow keys to change sample_count.");
         let sample_count = 1;
@@ -271,14 +260,8 @@ impl Renderer {
             usage: BufferUsage::VERTEX,
         });
         let vertex_count = vertex_data.len() as u32;
-        let mut app = LightGarden::new(Rect::from_tlbr(1., -1., -1., 1.), sc_desc.format);
-        let (pipeline, bind_group) = Renderer::create_pipeline(
-            &sc_desc,
-            device,
-            queue,
-            &shader,
-            &mut app,
-        );
+        let (pipeline, bind_group) =
+            Renderer::create_pipeline(&sc_desc, device, queue, &shader, app);
 
         let mut example = Renderer {
             bundle: None, // bundle will be initialized bellow
@@ -292,78 +275,9 @@ impl Renderer {
             rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
             sc_desc: sc_desc.clone(),
             egui_renderer: EguiRenderer::init(device, sc_desc.format),
-            app,
         };
-        example.create_bundle(device, queue);
+        example.create_bundle(device, queue, app);
         example
-    }
-    pub fn update(&mut self, event: &winit::event::WindowEvent) {
-        match event {
-            winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                if let winit::event::ElementState::Pressed = input.state {
-                    match input.virtual_keycode {
-                        Some(Key::Left) => {
-                            if self.sample_count >= 2 {
-                                self.sample_count = self.sample_count >> 1;
-                                self.rebuild_bundle = true;
-                            }
-                        }
-                        Some(Key::Right) => {
-                            if self.sample_count < 16 {
-                                self.sample_count = self.sample_count << 1;
-                                self.rebuild_bundle = true;
-                            }
-                        }
-                        Some(Key::C) => self.app.clear(),
-                        Some(Key::M) => self.app.mode = Mode::DrawMirrorStart,
-                        Some(Key::L) => self.app.mode = Mode::DrawPointLight,
-                        Some(Key::W) => self.app.mode = Mode::DrawCircleStart,
-                        Some(Key::X) => {
-                            self.app.refractive_index -= 0.1;
-                            self.app.update();
-                        }
-                        Some(Key::V) => {
-                            self.app.refractive_index += 0.1;
-                            self.app.update();
-                        }
-                        Some(Key::U) => {
-                            if self.app.max_bounce > 1 {
-                                self.app.max_bounce -= 1;
-                            }
-                        }
-                        Some(Key::I) => {
-                            if self.app.max_bounce < 100 {
-                                self.app.max_bounce += 1;
-                            }
-                        }
-
-                        _ => {}
-                    }
-                }
-            }
-
-            WindowEvent::CursorMoved { position, .. } => {
-                self.app.update_mouse_position(Point2::new(
-                    (2. * position.x / (self.sc_desc.width as f64)) - 1.,
-                    (2. * -position.y / (self.sc_desc.height as f64)) + 1.,
-                ));
-            }
-            WindowEvent::MouseInput {
-                state: event::ElementState::Released,
-                button: event::MouseButton::Left,
-                ..
-            } => {
-                self.app.mouse_clicked();
-            }
-            WindowEvent::MouseInput {
-                state: event::ElementState::Released,
-                button: event::MouseButton::Right,
-                ..
-            } => {
-                self.app.deselect();
-            }
-            _ => {}
-        }
     }
 
     fn generate_matrix(aspect_ratio: f32) -> cgmath::Matrix4<f32> {
@@ -372,20 +286,25 @@ impl Renderer {
         mx_correction * mx_projection //* mx_view
     }
 
-    pub fn resize(&mut self, sc_desc: &SwapChainDescriptor, device: &Device, queue: &Queue) {
+    pub fn resize(
+        &mut self,
+        sc_desc: &SwapChainDescriptor,
+        device: &Device,
+        queue: &Queue,
+        app: &mut LightGarden,
+    ) {
         self.sc_desc = sc_desc.clone();
-        let (pipeline, bind_group) = Renderer::create_pipeline(
-            &self.sc_desc,
-            device,
-            queue,
-            &self.shader,
-            &mut self.app,
-        );
+        let (pipeline, bind_group) =
+            Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, app);
         self.pipeline = pipeline;
         self.matrix_bind_group = bind_group;
         self.multisampled_framebuffer =
             Renderer::create_multisampled_framebuffer(device, sc_desc, self.sample_count);
     }
+
+    pub fn render_to_texture(&mut self, device: &Device, queue: &Queue) {}
+
+    pub fn render_texture(&mut self) {}
 
     pub fn render(
         &mut self,
@@ -394,7 +313,7 @@ impl Renderer {
         queue: &Queue,
         gui: &mut Gui,
     ) {
-        let vb = self.app.trace_all();
+        let vb = gui.app.trace_all();
         // self.update_vertex_buffer_with_line_strips(device, &vb);
         self.update_vertex_buffer(device, &vb);
 
@@ -416,13 +335,13 @@ impl Renderer {
                 }],
                 depth_stencil_attachment: None,
             });
-            if self.app.recreate_pipeline {
+            if gui.app.recreate_pipeline {
                 let (pipeline, bind_group) = Renderer::create_pipeline(
                     &self.sc_desc,
                     device,
                     queue,
                     &self.shader,
-                    &mut self.app,
+                    &mut gui.app,
                 );
                 self.pipeline = pipeline;
                 self.matrix_bind_group = bind_group;
@@ -435,13 +354,7 @@ impl Renderer {
             // egui renders here
         }
         queue.submit(iter::once(encoder.finish()));
-        self.egui_renderer.render(
-            device,
-            queue,
-            &self.sc_desc,
-            &frame.view,
-            gui,
-            &mut self.app,
-        );
+        self.egui_renderer
+            .render(device, queue, &self.sc_desc, &frame.view, gui);
     }
 }
