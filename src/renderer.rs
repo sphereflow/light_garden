@@ -1,76 +1,47 @@
-//! The parts of this example enabling MSAA are:
-//! *    The render pipeline is created with a sample_count > 1.
-//! *    A new texture with a sample_count > 1 is created and set as the color_attachment instead of the swapchain.
-//! *    The swapchain is now specified as a resolve_target.
-//!
-//! The parts of this example enabling LineList are:
-//! *   Set the primitive_topology to PrimitiveTopology::LineList.
-//! *   Vertices and Indices describe the two points that make up a line.
-
-use std::iter;
-
 use crate::egui_renderer::EguiRenderer;
 use crate::gui::Gui;
 use crate::light_garden::light::Color;
 use crate::light_garden::LightGarden;
+use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};
 use bytemuck::{Pod, Zeroable};
 use collision2d::geo::*;
+use std::iter;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-struct Vertex {
-    _pos: [f32; 2],
-    _color: [f32; 4],
+pub struct Vertex {
+    pub _pos: [f32; 2],
+    pub _color: [f32; 4],
+    pub _tex_coord: [f32; 2],
 }
 unsafe impl Pod for Vertex {}
 unsafe impl Zeroable for Vertex {}
 
 pub struct Renderer {
-    bundle: Option<RenderBundle>,
     shader: ShaderModule,
     pipeline: RenderPipeline,
-    multisampled_framebuffer: TextureView,
     vertex_buffer: Buffer,
     vertex_count: u32,
-    sample_count: u32,
     matrix_bind_group: BindGroup,
     rebuild_bundle: bool,
+    render_to_texture: bool,
+    texture_renderer: TextureRenderer,
     sc_desc: SwapChainDescriptor,
     egui_renderer: EguiRenderer,
 }
 
 impl Renderer {
-    // this function is called by Example::init(...) and Example::render(...)
-    // encoder.finish(...) creates a RenderBundle
-    fn create_bundle(&mut self, device: &Device, queue: &Queue, app: &mut LightGarden) {
-        log::info!("sample_count: {}", self.sample_count);
-        let (pipeline, bind_group) =
-            Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, app);
-        self.pipeline = pipeline;
-        self.matrix_bind_group = bind_group;
-        let mut encoder = device.create_render_bundle_encoder(&RenderBundleEncoderDescriptor {
-            label: None,
-            color_formats: &[self.sc_desc.format],
-            depth_stencil_format: None,
-            sample_count: self.sample_count,
-        });
-        encoder.set_pipeline(&self.pipeline);
-        encoder.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
-        encoder.draw(0..self.vertex_count, 0..1); // vertex range, instance range
-        self.bundle = Some(encoder.finish(&RenderBundleDescriptor {
-            label: Some("primitives render bundle"),
-        }));
-    }
-
     fn create_pipeline(
         sc_desc: &SwapChainDescriptor,
         device: &Device,
         queue: &Queue,
+        render_to_texture: bool,
         shader: &ShaderModule,
         app: &mut LightGarden,
     ) -> (RenderPipeline, BindGroup) {
+        // layout for the projection matrix
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
             entries: &[wgpu::BindGroupLayoutEntry {
@@ -85,6 +56,7 @@ impl Renderer {
             }],
         });
 
+        // create the projection matrix
         let aspect = sc_desc.width as f32 / sc_desc.height as f32;
         let mx = Self::generate_matrix(aspect);
         let mx_ref: &[f32; 16] = mx.as_ref();
@@ -93,8 +65,11 @@ impl Renderer {
             contents: bytemuck::cast_slice(mx_ref),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });
+
+        // set new canvas bounds
         app.canvas_bounds = Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64);
 
+        // write to the projection matix buffer
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("u_Transform"),
             layout: &bind_group_layout,
@@ -110,10 +85,13 @@ impl Renderer {
         queue.write_buffer(&mx_buf, 0, bytemuck::cast_slice(mx_ref));
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: None,
+            label: Some("pipeline layout"),
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
+        if render_to_texture {
+            app.color_state_descriptor.format = RENDER_TEXTURE_FORMAT;
+        }
         (
             device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: Some("render pipeline"),
@@ -124,7 +102,7 @@ impl Renderer {
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                         step_mode: wgpu::InputStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float4],
+                        attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float4, 2 => Float2],
                     }],
                 },
                 fragment: Some(FragmentState {
@@ -135,18 +113,11 @@ impl Renderer {
                 // render lines
                 primitive: PrimitiveState {
                     topology: PrimitiveTopology::LineList,
-                    front_face: FrontFace::Ccw,
+                    front_face: FrontFace::Cw,
                     ..Default::default()
                 },
                 depth_stencil: None,
-                // vertex_state: VertexStateDescriptor {
-                // index_format: IndexFormat::Uint16,
-                // vertex_buffers: &[VertexBufferDescriptor {
-                // stride: std::mem::size_of::<Vertex>() as BufferAddress,
-                // step_mode: InputStepMode::Vertex,
-                // attributes: &vertex_attr_array![0 => Float2, 1 => Float4],
-                // }],
-                // },
+                // no multisample
                 multisample: MultisampleState {
                     ..Default::default()
                 },
@@ -155,37 +126,13 @@ impl Renderer {
         )
     }
 
-    fn create_multisampled_framebuffer(
-        device: &Device,
-        sc_desc: &SwapChainDescriptor,
-        sample_count: u32,
-    ) -> TextureView {
-        let multisampled_texture_extent = Extent3d {
-            width: sc_desc.width,
-            height: sc_desc.height,
-            depth: 1,
-        };
-        let multisampled_frame_descriptor = &TextureDescriptor {
-            size: multisampled_texture_extent,
-            mip_level_count: 1,
-            sample_count,
-            dimension: TextureDimension::D2,
-            format: sc_desc.format,
-            usage: TextureUsage::RENDER_ATTACHMENT,
-            label: None,
-        };
-
-        device
-            .create_texture(multisampled_frame_descriptor)
-            .create_view(&TextureViewDescriptor::default())
-    }
-
-    pub fn update_vertex_buffer(&mut self, device: &Device, vertices: &Vec<(P2, Color)>) {
+    pub fn update_vertex_buffer(&mut self, device: &Device, vertices: &[(P2, Color)]) {
         let vertex_data: Vec<Vertex> = vertices
             .iter()
             .map(|(p, color)| Vertex {
                 _pos: [p.x as f32, p.y as f32],
                 _color: *color,
+                _tex_coord: [0., 0.],
             })
             .collect();
         self.vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -200,7 +147,7 @@ impl Renderer {
     pub fn update_vertex_buffer_with_line_strips(
         &mut self,
         device: &Device,
-        vertices: &Vec<(Vec<P2>, Color)>,
+        vertices: &[(Vec<P2>, Color)],
     ) {
         let mut vertex_data: Vec<Vertex> = Vec::with_capacity(vertices.len() * 2);
         for (line_strip, color) in vertices {
@@ -208,10 +155,12 @@ impl Renderer {
                 vertex_data.push(Vertex {
                     _pos: [w[0].x as f32, w[0].y as f32],
                     _color: *color,
+                    _tex_coord: [0., 0.],
                 });
                 vertex_data.push(Vertex {
                     _pos: [w[1].x as f32, w[1].y as f32],
                     _color: *color,
+                    _tex_coord: [0., 0.],
                 });
             }
         }
@@ -229,11 +178,9 @@ impl Renderer {
         device: &Device,
         adapter: &Adapter,
         queue: &Queue, // we might need to meddle with the command queue
+        render_to_texture: bool,
         app: &mut LightGarden,
     ) -> Self {
-        log::info!("Press left/right arrow keys to change sample_count.");
-        let sample_count = 1;
-
         let mut flags = wgpu::ShaderFlags::VALIDATION;
         match adapter.get_info().backend {
             wgpu::Backend::Metal | wgpu::Backend::Vulkan => {
@@ -249,9 +196,6 @@ impl Renderer {
             flags,
         });
 
-        let multisampled_framebuffer: TextureView =
-            Renderer::create_multisampled_framebuffer(device, sc_desc, sample_count);
-
         // create the vertex buffer
         let vertex_data: Vec<Vertex> = vec![];
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -261,23 +205,23 @@ impl Renderer {
         });
         let vertex_count = vertex_data.len() as u32;
         let (pipeline, bind_group) =
-            Renderer::create_pipeline(&sc_desc, device, queue, &shader, app);
+            Renderer::create_pipeline(&sc_desc, device, queue, render_to_texture, &shader, app);
 
-        let mut example = Renderer {
-            bundle: None, // bundle will be initialized bellow
+        let texture_renderer =
+            TextureRenderer::init(device, adapter, sc_desc, app.color_state_descriptor.clone());
+
+        Renderer {
             shader,
             pipeline,
-            multisampled_framebuffer, // there should be nothing in here yet
             vertex_buffer,
             vertex_count,
-            sample_count,
             matrix_bind_group: bind_group,
             rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
+            render_to_texture,
+            texture_renderer,
             sc_desc: sc_desc.clone(),
             egui_renderer: EguiRenderer::init(device, sc_desc.format),
-        };
-        example.create_bundle(device, queue, app);
-        example
+        }
     }
 
     fn generate_matrix(aspect_ratio: f32) -> cgmath::Matrix4<f32> {
@@ -294,17 +238,138 @@ impl Renderer {
         app: &mut LightGarden,
     ) {
         self.sc_desc = sc_desc.clone();
-        let (pipeline, bind_group) =
-            Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, app);
+        self.texture_renderer
+            .generate_render_texture(device, &self.sc_desc);
+
+        let (pipeline, bind_group) = Renderer::create_pipeline(
+            &self.sc_desc,
+            device,
+            queue,
+            self.render_to_texture,
+            &self.shader,
+            app,
+        );
         self.pipeline = pipeline;
         self.matrix_bind_group = bind_group;
-        self.multisampled_framebuffer =
-            Renderer::create_multisampled_framebuffer(device, sc_desc, self.sample_count);
+        self.texture_renderer
+            .generate_render_texture(device, &self.sc_desc);
     }
 
-    pub fn render_to_texture(&mut self, device: &Device, queue: &Queue) {}
+    fn clear_render_texture(&mut self, queue: &Queue) {
+        let size = (self.sc_desc.width * self.sc_desc.height) as usize;
+        let dimensions = Extent3d {
+            width: self.sc_desc.width,
+            height: self.sc_desc.height,
+            depth: 1,
+        };
+        let black: Vec<[f32; 4]> = vec![[0., 0., 0., 1.]; size];
+        queue.write_texture(
+            TextureCopyView {
+                texture: &self.texture_renderer.render_texture,
+                mip_level: 0,
+                origin: Origin3d::ZERO,
+            },
+            bytemuck::cast_slice(black.as_slice()),
+            TextureDataLayout {
+                offset: 0,
+                bytes_per_row: self.sc_desc.width * 4 * 4,
+                rows_per_image: self.sc_desc.height,
+            },
+            dimensions,
+        );
+    }
 
-    pub fn render_texture(&mut self) {}
+    fn render_to_texture(&mut self, device: &Device, queue: &Queue) {
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("render to texture command encoder"),
+        });
+        {
+            let view = self
+                .texture_renderer
+                .render_texture
+                .create_view(&TextureViewDescriptor::default());
+            let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("render to texture render pass"),
+                color_attachments: &[RenderPassColorAttachmentDescriptor {
+                    attachment: &view,
+                    ops: Operations {
+                        load: LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                    resolve_target: None,
+                }],
+                depth_stencil_attachment: None,
+            });
+            rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
+            rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
+        }
+        queue.submit(iter::once(encoder.finish()));
+    }
+
+    fn render_texture(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        frame: &SwapChainTexture,
+        gui: &mut Gui,
+    ) {
+        self.clear_render_texture(queue);
+        self.render_to_texture(device, queue);
+        if gui.app.recreate_pipeline {
+            let (pipeline, _bind_group_layout, bind_group, _sampler) =
+                TextureRenderer::create_pipeline(
+                    device,
+                    &self.sc_desc,
+                    &self.texture_renderer.shader,
+                    &self.texture_renderer.render_texture,
+                    gui.app.color_state_descriptor.clone(),
+                );
+            self.texture_renderer.pipeline = pipeline;
+            self.texture_renderer.bind_group = bind_group;
+        }
+        // the bind group must be recreated every frame
+        self.texture_renderer.bind_group = TextureRenderer::create_bind_group(
+            device,
+            &self.texture_renderer.bind_group_layout,
+            &self.texture_renderer.render_texture,
+            &self.texture_renderer.sampler,
+        );
+        self.egui_renderer
+            .render(device, queue, &self.sc_desc, &frame.view, gui);
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("Command Encoder"),
+        });
+
+        {
+            let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("rpass: RenderPassDescriptor"),
+                color_attachments: &[RenderPassColorAttachmentDescriptor {
+                    attachment: &frame.view,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: None,
+            });
+            rpass.set_pipeline(&self.texture_renderer.pipeline);
+            rpass.set_bind_group(0, &self.texture_renderer.bind_group, &[]);
+            rpass.set_vertex_buffer(0, self.texture_renderer.background_quad_buffer.slice(..)); // slot 0
+            rpass.set_index_buffer(
+                self.texture_renderer.background_quad_index_buffer.slice(..),
+                IndexFormat::Uint16,
+            );
+            rpass.draw_indexed(0..self.texture_renderer.index_buffer_size, 0, 0..1);
+            // vertex range, instance range
+        }
+        queue.submit(iter::once(encoder.finish()));
+        // egui renders here
+        self.egui_renderer
+            .render(device, queue, &self.sc_desc, &frame.view, gui);
+    }
 
     pub fn render(
         &mut self,
@@ -317,44 +382,48 @@ impl Renderer {
         // self.update_vertex_buffer_with_line_strips(device, &vb);
         self.update_vertex_buffer(device, &vb);
 
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("Command Encoder"),
-        });
-
-        {
-            // setup render pass
-            let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
-                label: Some("egui_rpass: RenderPassDescriptor"),
-                color_attachments: &[RenderPassColorAttachmentDescriptor {
-                    attachment: &frame.view,
-                    resolve_target: None,
-                    ops: Operations {
-                        load: LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
-                    },
-                }],
-                depth_stencil_attachment: None,
-            });
-            if gui.app.recreate_pipeline {
-                let (pipeline, bind_group) = Renderer::create_pipeline(
-                    &self.sc_desc,
-                    device,
-                    queue,
-                    &self.shader,
-                    &mut gui.app,
-                );
-                self.pipeline = pipeline;
-                self.matrix_bind_group = bind_group;
-            }
-            rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
-            rpass.set_pipeline(&self.pipeline);
-            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
-            rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
-
-            // egui renders here
+        if gui.app.recreate_pipeline {
+            let (pipeline, bind_group) = Renderer::create_pipeline(
+                &self.sc_desc,
+                device,
+                queue,
+                self.render_to_texture,
+                &self.shader,
+                &mut gui.app,
+            );
+            self.pipeline = pipeline;
+            self.matrix_bind_group = bind_group;
         }
-        queue.submit(iter::once(encoder.finish()));
-        self.egui_renderer
-            .render(device, queue, &self.sc_desc, &frame.view, gui);
+
+        if self.render_to_texture {
+            self.render_texture(device, queue, frame, gui);
+        } else {
+            let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+                label: Some("Command Encoder"),
+            });
+
+            {
+                let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: Some("rpass: RenderPassDescriptor"),
+                    color_attachments: &[RenderPassColorAttachmentDescriptor {
+                        attachment: &frame.view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(wgpu::Color::BLACK),
+                            store: true,
+                        },
+                    }],
+                    depth_stencil_attachment: None,
+                });
+                rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
+                rpass.set_pipeline(&self.pipeline);
+                rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
+                rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
+            }
+            queue.submit(iter::once(encoder.finish()));
+            // egui renders here
+            self.egui_renderer
+                .render(device, queue, &self.sc_desc, &frame.view, gui);
+        }
     }
 }

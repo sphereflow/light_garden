@@ -397,13 +397,10 @@ impl LightGarden {
         for light in self.lights.iter() {
             let mut refractive_index = 1.;
             for obj in self.objects.iter() {
-                match obj {
-                    Object::Circle(c, material) => {
-                        if c.contains(&light.get_origin()) {
-                            refractive_index = material.refractive_index;
-                        }
+                if let Object::Circle(c, material) = obj {
+                    if c.contains(&light.get_origin()) {
+                        refractive_index = material.refractive_index;
                     }
-                    _ => {}
                 }
             }
             let lines: Vec<(P2, Color)> = light

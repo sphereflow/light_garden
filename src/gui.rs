@@ -77,7 +77,7 @@ impl Gui {
 
                     let mut chunk_size = self.app.chunk_size as u32;
                     ui.add(
-                        Slider::u32(&mut chunk_size, 1..=1000).text(format!("Rayon Chunk Size")),
+                        Slider::u32(&mut chunk_size, 1..=1000).text("Rayon Chunk Size"),
                     );
                     self.app.chunk_size = chunk_size as usize;
 
@@ -109,13 +109,13 @@ impl Gui {
                     }
                     if let Some(ligh_ix) = self.app.selected_light {
                         ui.label(format!("Selected Light Index: {}", ligh_ix));
-                        if ui.button(format!("Delete")).clicked() {
+                        if ui.button("Delete").clicked() {
                             self.app.delete_selected();
                         }
                     }
                     if let Some(light) = self.app.get_selected_light() {
                         Gui::edit_light(light, ui);
-                        if ui.button(format!("Move Light")).clicked() {
+                        if ui.button("Move Light").clicked() {
                             self.app.mode = Mode::Move;
                         }
                     } else {
@@ -173,7 +173,7 @@ impl Gui {
         match light {
             Light::PointLight(_point) => { /* no user interface elements to add */ }
             Light::SpotLight(spot) => {
-                ui.add(Slider::f64(&mut spot.spot_angle, 0.0..=360.0).text(format!("Spot Angle")));
+                ui.add(Slider::f64(&mut spot.spot_angle, 0.0..=360.0).text("Spot Angle"));
             }
             Light::DirectionalLight(_direction) => {}
         }
@@ -183,10 +183,10 @@ impl Gui {
         if let Some(material) = object.material_mut() {
             let mut whole: i32 = material.refractive_index.floor() as i32;
             let mut frac: Float = material.refractive_index - whole as Float;
-            ui.add(Slider::i32(&mut whole, -10..=10).text(format!("Refractive Index whole part")));
+            ui.add(Slider::i32(&mut whole, -10..=10).text("Refractive Index whole part"));
             ui.add(
                 Slider::f64(&mut frac, -0.0..=0.999)
-                    .text(format!("Refractive Index fractional part")),
+                    .text("Refractive Index fractional part"),
             );
             material.refractive_index = whole as Float + frac;
         }
@@ -279,11 +279,11 @@ impl Gui {
     pub fn edit_cutoff_color(&mut self, ui: &mut Ui) {
         let mut color = self.app.cutoff_color;
         let mut rgb = (color[0] + color[1] + color[2]) / 3.;
-        ui.add(Slider::f32(&mut rgb, 0.001..=0.05).text(format!("Cutoff RGB")));
+        ui.add(Slider::f32(&mut rgb, 0.00001..=0.05).text("Cutoff RGB"));
         color[0] = rgb;
         color[1] = rgb;
         color[2] = rgb;
-        ui.add(Slider::f32(&mut color[3], 0.001..=0.5).text(format!("Cutoff Alpha")));
+        ui.add(Slider::f32(&mut color[3], 0.00001..=0.5).text("Cutoff Alpha"));
         self.app.cutoff_color = color;
     }
 

@@ -156,7 +156,7 @@ fn start(
 
     log::info!("Initializing the example...");
     let mut gui = Gui::new(&window, &sc_desc); 
-    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, &mut gui.app);
+    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, true, &mut gui.app);
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
