@@ -1,6 +1,5 @@
-
+use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
-use crate::gui::Gui;
 #[cfg(not(target_arch = "wasm32"))]
 use futures_lite::future;
 #[cfg(not(target_arch = "wasm32"))]
@@ -55,7 +54,8 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     };
 
     let event_loop = EventLoop::new();
-    let mut builder = winit::window::WindowBuilder::new().with_inner_size(LogicalSize::new(width as f32, height as f32));
+    let mut builder = winit::window::WindowBuilder::new()
+        .with_inner_size(LogicalSize::new(width as f32, height as f32));
     builder = builder.with_title(title);
     #[cfg(windows_OFF)] // TODO
     {
@@ -112,7 +112,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
-                label: None, 
+                label: None,
                 features: (optional_features & adapter_features) | required_features,
                 limits: needed_limits,
             },
@@ -155,7 +155,7 @@ fn start(
     let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);
 
     log::info!("Initializing the example...");
-    let mut gui = Gui::new(&window, &sc_desc); 
+    let mut gui = Gui::new(&window, &sc_desc);
     let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, true, &mut gui.app);
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
@@ -172,17 +172,16 @@ fn start(
                 ControlFlow::Poll
             }
         };
+
         match event {
             event::Event::MainEventsCleared => {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
                     window.request_redraw();
                 }
-
                 #[cfg(target_arch = "wasm32")]
                 window.request_redraw();
             }
-
             event::Event::WindowEvent {
                 event: WindowEvent::Resized(size),
                 ..
@@ -194,24 +193,13 @@ fn start(
                 swap_chain = device.create_swap_chain(&surface, &sc_desc);
             }
             event::Event::WindowEvent { ref event, .. } => match event {
-                WindowEvent::KeyboardInput {
-                    input:
-                        event::KeyboardInput {
-                            virtual_keycode: Some(event::VirtualKeyCode::Escape),
-                            state: event::ElementState::Pressed,
-                            ..
-                        },
-                    ..
-                }
-                | WindowEvent::CloseRequested => {
+                WindowEvent::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
                 }
-
                 _ => {
                     gui.update(event, &sc_desc);
                 }
             },
-
             event::Event::RedrawRequested(_) => {
                 let frame = match swap_chain.get_current_frame() {
                     Ok(frame) => frame,
@@ -222,12 +210,14 @@ fn start(
                             .expect("Failed to acquire next swap chain texture!")
                     }
                 };
-
-
                 renderer.render(&frame.output, &device, &queue, &mut gui);
-
             }
+
             _ => {}
+        }
+
+        if gui.ui_mode == UiMode::Exiting {
+            *control_flow = ControlFlow::Exit;
         }
         gui.platform.handle_event(&event);
     });

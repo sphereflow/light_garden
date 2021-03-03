@@ -14,6 +14,7 @@ pub struct Gui {
     last_update_inst: Instant,
     last_cursor: Option<Pos2>,
     pub app: LightGarden,
+    pub ui_mode: UiMode,
 }
 
 impl Gui {
@@ -40,6 +41,7 @@ impl Gui {
             last_update_inst,
             last_cursor: None,
             app,
+            ui_mode: UiMode::new(),
         }
     }
 
@@ -62,79 +64,24 @@ impl Gui {
                         ));
                     }
 
-                    if ui.button("Add Point Light").clicked() {
-                        self.app.mode = Mode::DrawPointLight;
-                    }
-                    if ui.button("Add Rect").clicked() {
-                        self.app.mode = Mode::DrawRectStart;
-                    }
-                    if ui.button("Add Circle").clicked() {
-                        self.app.mode = Mode::DrawCircleStart;
-                    }
-                    if ui.button("Select").clicked() {
-                        self.app.mode = Mode::Selecting(None);
-                    }
-
-                    let mut chunk_size = self.app.chunk_size as u32;
-                    ui.add(
-                        Slider::u32(&mut chunk_size, 1..=1000).text("Rayon Chunk Size"),
-                    );
-                    self.app.chunk_size = chunk_size as usize;
-
-                    if let Some(obj) = self.app.get_selected_object() {
-                        Gui::edit_object(obj, ui);
-                    }
-                    if self.app.get_selected_object().is_some() {
-                        if ui.button("Move Obj").clicked() {
-                            self.app.mode = Mode::Move;
+                    match self.ui_mode {
+                        UiMode::Main => {
+                            self.main(ui);
                         }
-                        if ui.button("Rotate").clicked() {
-                            self.app.mode = Mode::Rotate;
+                        UiMode::Add => {
+                            self.add(ui);
                         }
-                        if ui.button("And").clicked() {
-                            self.app.mode = Mode::Selecting(Some(LogicOp::And));
+                        UiMode::Edit => {
+                            self.edit(ui);
                         }
-                        if ui.button("Or").clicked() {
-                            self.app.mode = Mode::Selecting(Some(LogicOp::Or));
+                        UiMode::Selected => {
+                            self.selected(ui);
                         }
-                        if ui.button("AndNot").clicked() {
-                            self.app.mode = Mode::Selecting(Some(LogicOp::AndNot));
+                        UiMode::Settings => {
+                            self.settings(ui);
                         }
+                        UiMode::Exiting => {}
                     }
-                    if let Some(obj_ix) = self.app.selected_object {
-                        ui.label(format!("Selected Object Index: {}", obj_ix));
-                        if ui.button("Delete").clicked() {
-                            self.app.delete_selected();
-                        }
-                    }
-                    if let Some(ligh_ix) = self.app.selected_light {
-                        ui.label(format!("Selected Light Index: {}", ligh_ix));
-                        if ui.button("Delete").clicked() {
-                            self.app.delete_selected();
-                        }
-                    }
-                    if let Some(light) = self.app.get_selected_light() {
-                        Gui::edit_light(light, ui);
-                        if ui.button("Move Light").clicked() {
-                            self.app.mode = Mode::Move;
-                        }
-                    } else {
-                        let ac = self.app.selected_color;
-                        let mut color = Color32::from(Rgba::from_rgba_premultiplied(
-                            ac[0], ac[1], ac[2], ac[3],
-                        ));
-                        egui::widgets::color_picker::color_edit_button_srgba(
-                            ui,
-                            &mut color,
-                            color_picker::Alpha::OnlyBlend,
-                        );
-                        let rgba = Rgba::from(color);
-                        self.app.selected_color = [rgba[0], rgba[1], rgba[2], rgba[3]];
-                    }
-
-                    self.edit_blend(ui);
-
-                    self.edit_cutoff_color(ui);
 
                     #[cfg(not(target_arch = "wasm32"))]
                     {
@@ -151,6 +98,103 @@ impl Gui {
 
         let (_output, paint_commands) = self.platform.end_frame();
         ctx.tessellate(paint_commands)
+    }
+
+    fn main(&mut self, ui: &mut Ui) {
+        if ui.button("(A)dd ...").clicked() {
+            self.ui_mode = UiMode::Add;
+        }
+        if ui.button("(S)elect").clicked() {
+            self.ui_mode = UiMode::Selected;
+            self.app.mode = Mode::Selecting(None);
+        }
+        if ui.button("S(e)ttings").clicked() {
+            self.ui_mode = UiMode::Settings;
+        }
+        if ui.button("(Q)it").clicked() {
+            self.ui_mode = UiMode::Exiting;
+        }
+    }
+
+    fn selected(&mut self, ui: &mut Ui) {
+        if let Some(obj) = self.app.get_selected_object() {
+            Gui::edit_object(obj, ui);
+        }
+        if ui.button("(E)dit").clicked() {
+            self.ui_mode = UiMode::Edit;
+        }
+
+        if ui.button("(D)elete").clicked() {
+            self.app.delete_selected();
+            self.ui_mode = UiMode::Main;
+        }
+
+        if let Some(light) = self.app.get_selected_light() {
+            Gui::edit_light(light, ui);
+            if ui.button("(M)ove Light").clicked() {
+                self.app.mode = Mode::Move;
+            }
+        } else {
+            let ac = self.app.selected_color;
+            let mut color =
+                Color32::from(Rgba::from_rgba_premultiplied(ac[0], ac[1], ac[2], ac[3]));
+            egui::widgets::color_picker::color_edit_button_srgba(
+                ui,
+                &mut color,
+                color_picker::Alpha::OnlyBlend,
+            );
+            let rgba = Rgba::from(color);
+            self.app.selected_color = [rgba[0], rgba[1], rgba[2], rgba[3]];
+        }
+    }
+
+    fn add(&mut self, ui: &mut Ui) {
+        if self.ui_mode == UiMode::Add {
+            if ui.button("Add (P)oint Light").clicked() {
+                self.app.mode = Mode::DrawPointLight;
+            }
+            if ui.button("Add (R)ect").clicked() {
+                self.app.mode = Mode::DrawRectStart;
+            }
+            if ui.button("Add (C)ircle").clicked() {
+                self.app.mode = Mode::DrawCircleStart;
+            }
+            if ui.button("Add (M)irror").clicked() {
+                self.app.mode = Mode::DrawMirrorStart;
+            }
+        }
+    }
+
+    fn edit(&mut self, ui: &mut Ui) {
+        if self.app.get_selected_object().is_some() {
+            if ui.button("(M)ove Obj").clicked() {
+                self.app.mode = Mode::Move;
+            }
+            if ui.button("(R)otate").clicked() {
+                self.app.mode = Mode::Rotate;
+            }
+            if ui.button("(A)nd").clicked() {
+                self.app.mode = Mode::Selecting(Some(LogicOp::And));
+            }
+            if ui.button("(O)r").clicked() {
+                self.app.mode = Mode::Selecting(Some(LogicOp::Or));
+            }
+            if ui.button("And(N)ot").clicked() {
+                self.app.mode = Mode::Selecting(Some(LogicOp::AndNot));
+            }
+        }
+    }
+
+    fn settings(&mut self, ui: &mut Ui) {
+        let mut chunk_size = self.app.chunk_size as u32;
+        ui.add(Slider::u32(&mut chunk_size, 1..=1000).text("Rayon Chunk Size"));
+        self.app.chunk_size = chunk_size as usize;
+
+        self.edit_blend(ui);
+
+        self.edit_cutoff_color(ui);
+
+        self.toggle_render_to_texture(ui);
     }
 
     fn edit_light(light: &mut Light, ui: &mut Ui) {
@@ -184,10 +228,7 @@ impl Gui {
             let mut whole: i32 = material.refractive_index.floor() as i32;
             let mut frac: Float = material.refractive_index - whole as Float;
             ui.add(Slider::i32(&mut whole, -10..=10).text("Refractive Index whole part"));
-            ui.add(
-                Slider::f64(&mut frac, -0.0..=0.999)
-                    .text("Refractive Index fractional part"),
-            );
+            ui.add(Slider::f64(&mut frac, -0.0..=0.999).text("Refractive Index fractional part"));
             material.refractive_index = whole as Float + frac;
         }
     }
@@ -273,7 +314,7 @@ impl Gui {
         selected_changed |= self.app.color_state_descriptor.alpha_blend.operation != selected;
         self.app.color_state_descriptor.alpha_blend.operation = selected;
 
-        self.app.recreate_pipeline = selected_changed;
+        self.app.recreate_pipeline |= selected_changed;
     }
 
     pub fn edit_cutoff_color(&mut self, ui: &mut Ui) {
@@ -283,8 +324,14 @@ impl Gui {
         color[0] = rgb;
         color[1] = rgb;
         color[2] = rgb;
-        ui.add(Slider::f32(&mut color[3], 0.00001..=0.5).text("Cutoff Alpha"));
+        ui.add(Slider::f32(&mut color[3], 0.00001..=0.05).text("Cutoff Alpha"));
         self.app.cutoff_color = color;
+    }
+
+    pub fn toggle_render_to_texture(&mut self, ui: &mut Ui) {
+        let mut render_to_texture = self.app.get_render_to_texture();
+        ui.add(Checkbox::new(&mut render_to_texture, "render to texture"));
+        self.app.set_render_to_texture(render_to_texture);
     }
 
     pub fn update(
@@ -298,29 +345,50 @@ impl Gui {
         match event {
             winit::event::WindowEvent::KeyboardInput { input, .. } => {
                 if let winit::event::ElementState::Pressed = input.state {
-                    match input.virtual_keycode {
-                        Some(Key::C) => self.app.clear(),
-                        Some(Key::M) => self.app.mode = Mode::DrawMirrorStart,
-                        Some(Key::L) => self.app.mode = Mode::DrawPointLight,
-                        Some(Key::W) => self.app.mode = Mode::DrawCircleStart,
-                        Some(Key::X) => {
-                            self.app.refractive_index -= 0.1;
-                            self.app.update();
-                        }
-                        Some(Key::V) => {
-                            self.app.refractive_index += 0.1;
-                            self.app.update();
-                        }
-                        Some(Key::U) => {
-                            if self.app.max_bounce > 1 {
-                                self.app.max_bounce -= 1;
+                    match (input.virtual_keycode, self.ui_mode) {
+                        (Some(Key::Escape), ui_mode) => match ui_mode {
+                            UiMode::Main => {}
+                            UiMode::Add => self.ui_mode = UiMode::Main,
+                            UiMode::Edit => self.ui_mode = UiMode::Selected,
+                            UiMode::Selected => {
+                                self.app.deselect();
+                                self.ui_mode = UiMode::Main;
                             }
+                            UiMode::Settings => self.ui_mode = UiMode::Main,
+                            UiMode::Exiting => {}
+                        },
+                        (Some(Key::A), UiMode::Main) => self.ui_mode = UiMode::Add,
+                        (Some(Key::S), UiMode::Main) => {
+                            self.ui_mode = UiMode::Selected;
+                            self.app.mode = Mode::Selecting(None)
                         }
-                        Some(Key::I) => {
-                            if self.app.max_bounce < 100 {
-                                self.app.max_bounce += 1;
-                            }
+                        (Some(Key::E), UiMode::Main) => self.ui_mode = UiMode::Settings,
+
+                        (Some(Key::P), UiMode::Add) => self.app.mode = Mode::DrawPointLight,
+                        (Some(Key::R), UiMode::Add) => self.app.mode = Mode::DrawRectStart,
+                        (Some(Key::C), UiMode::Add) => self.app.mode = Mode::DrawCircleStart,
+                        (Some(Key::M), UiMode::Add) => self.app.mode = Mode::DrawMirrorStart,
+
+                        (Some(Key::M), UiMode::Edit) => self.app.mode = Mode::Move,
+                        (Some(Key::R), UiMode::Edit) => self.app.mode = Mode::Rotate,
+                        (Some(Key::A), UiMode::Edit) => {
+                            self.app.mode = Mode::Selecting(Some(LogicOp::And))
                         }
+                        (Some(Key::O), UiMode::Edit) => {
+                            self.app.mode = Mode::Selecting(Some(LogicOp::Or))
+                        }
+                        (Some(Key::N), UiMode::Edit) => {
+                            self.app.mode = Mode::Selecting(Some(LogicOp::AndNot))
+                        }
+
+                        (Some(Key::E), UiMode::Selected) => self.ui_mode = UiMode::Edit,
+                        (Some(Key::D), UiMode::Selected) => {
+                            self.app.delete_selected();
+                            self.ui_mode = UiMode::Main;
+                        }
+                        (Some(Key::M), UiMode::Selected) => self.app.mode = Mode::Move,
+
+                        (Some(Key::Q), _) => self.ui_mode = UiMode::Exiting,
 
                         _ => {}
                     }
@@ -349,5 +417,21 @@ impl Gui {
             }
             _ => {}
         }
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum UiMode {
+    Main,
+    Add,
+    Edit,
+    Selected,
+    Settings,
+    Exiting,
+}
+
+impl UiMode {
+    pub fn new() -> UiMode {
+        UiMode::Main
     }
 }

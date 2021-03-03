@@ -30,6 +30,7 @@ pub struct LightGarden {
     pub refractive_index: Float,
     pub chunk_size: usize,
     pub cutoff_color: Color,
+    render_to_texture: bool,
     trace_time_vd: VecDeque<f64>,
 }
 
@@ -71,6 +72,7 @@ impl LightGarden {
             canvas_bounds,
             selected_color: [0.05, 0.05, 0.05, 0.01],
             cutoff_color: [0.01; 4],
+            render_to_texture: true,
             ray_width: 1.0,
             mode: Mode::NoMode,
             refractive_index: 2.,
@@ -310,12 +312,11 @@ impl LightGarden {
     pub fn delete_selected(&mut self) {
         if let Some(ix) = self.selected_light {
             self.lights.remove(ix);
-            self.selected_light = None;
         }
         if let Some(ix) = self.selected_object {
             self.objects.remove(ix);
-            self.selected_object = None;
         }
+        self.deselect();
     }
 
     pub fn deselect(&mut self) {
@@ -326,6 +327,18 @@ impl LightGarden {
     }
 
     pub fn update_tick(&mut self, _frame_time: f64) {}
+
+    pub fn get_render_to_texture(&self) -> bool {
+        self.render_to_texture
+    }
+
+    pub fn set_render_to_texture(&mut self, render_to_texture: bool) {
+        if render_to_texture != self.render_to_texture {
+            println!("render_to_texture toggled: {}", render_to_texture);
+            self.render_to_texture = render_to_texture;
+            self.recreate_pipeline = true;
+        }
+    }
 
     pub fn get_trace_time(&self) -> f64 {
         self.trace_time_vd.iter().sum::<f64>() / self.trace_time_vd.len() as f64

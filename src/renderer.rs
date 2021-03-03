@@ -26,7 +26,6 @@ pub struct Renderer {
     vertex_count: u32,
     matrix_bind_group: BindGroup,
     rebuild_bundle: bool,
-    render_to_texture: bool,
     texture_renderer: TextureRenderer,
     sc_desc: SwapChainDescriptor,
     egui_renderer: EguiRenderer,
@@ -37,10 +36,10 @@ impl Renderer {
         sc_desc: &SwapChainDescriptor,
         device: &Device,
         queue: &Queue,
-        render_to_texture: bool,
         shader: &ShaderModule,
         app: &mut LightGarden,
     ) -> (RenderPipeline, BindGroup) {
+        app.recreate_pipeline = false;
         // layout for the projection matrix
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: None,
@@ -89,9 +88,13 @@ impl Renderer {
             bind_group_layouts: &[&bind_group_layout],
             push_constant_ranges: &[],
         });
-        if render_to_texture {
+
+        if app.get_render_to_texture() {
             app.color_state_descriptor.format = RENDER_TEXTURE_FORMAT;
+        } else {
+            app.color_state_descriptor.format = TextureFormat::Bgra8UnormSrgb;
         }
+
         (
             device.create_render_pipeline(&RenderPipelineDescriptor {
                 label: Some("render pipeline"),
@@ -205,7 +208,7 @@ impl Renderer {
         });
         let vertex_count = vertex_data.len() as u32;
         let (pipeline, bind_group) =
-            Renderer::create_pipeline(&sc_desc, device, queue, render_to_texture, &shader, app);
+            Renderer::create_pipeline(&sc_desc, device, queue, &shader, app);
 
         let texture_renderer =
             TextureRenderer::init(device, adapter, sc_desc, app.color_state_descriptor.clone());
@@ -217,7 +220,6 @@ impl Renderer {
             vertex_count,
             matrix_bind_group: bind_group,
             rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
-            render_to_texture,
             texture_renderer,
             sc_desc: sc_desc.clone(),
             egui_renderer: EguiRenderer::init(device, sc_desc.format),
@@ -241,14 +243,8 @@ impl Renderer {
         self.texture_renderer
             .generate_render_texture(device, &self.sc_desc);
 
-        let (pipeline, bind_group) = Renderer::create_pipeline(
-            &self.sc_desc,
-            device,
-            queue,
-            self.render_to_texture,
-            &self.shader,
-            app,
-        );
+        let (pipeline, bind_group) =
+            Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, app);
         self.pipeline = pipeline;
         self.matrix_bind_group = bind_group;
         self.texture_renderer
@@ -383,19 +379,13 @@ impl Renderer {
         self.update_vertex_buffer(device, &vb);
 
         if gui.app.recreate_pipeline {
-            let (pipeline, bind_group) = Renderer::create_pipeline(
-                &self.sc_desc,
-                device,
-                queue,
-                self.render_to_texture,
-                &self.shader,
-                &mut gui.app,
-            );
+            let (pipeline, bind_group) =
+                Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, &mut gui.app);
             self.pipeline = pipeline;
             self.matrix_bind_group = bind_group;
         }
 
-        if self.render_to_texture {
+        if gui.app.get_render_to_texture() {
             self.render_texture(device, queue, frame, gui);
         } else {
             let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
