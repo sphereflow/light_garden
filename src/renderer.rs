@@ -181,7 +181,6 @@ impl Renderer {
         device: &Device,
         adapter: &Adapter,
         queue: &Queue, // we might need to meddle with the command queue
-        render_to_texture: bool,
         app: &mut LightGarden,
     ) -> Self {
         let mut flags = wgpu::ShaderFlags::VALIDATION;

@@ -2,8 +2,6 @@ use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
 #[cfg(not(target_arch = "wasm32"))]
 use futures_lite::future;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::{Duration, Instant};
 use winit::{
     dpi::LogicalSize,
     event::{self, WindowEvent},
@@ -156,7 +154,7 @@ fn start(
 
     log::info!("Initializing the example...");
     let mut gui = Gui::new(&window, &sc_desc);
-    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, true, &mut gui.app);
+    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, &mut gui.app);
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
@@ -165,6 +163,7 @@ fn start(
         } else {
             #[cfg(not(target_arch = "wasm32"))]
             {
+                use instant::{Instant, Duration};
                 ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(10))
             }
             #[cfg(target_arch = "wasm32")]
@@ -175,11 +174,6 @@ fn start(
 
         match event {
             event::Event::MainEventsCleared => {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    window.request_redraw();
-                }
-                #[cfg(target_arch = "wasm32")]
                 window.request_redraw();
             }
             event::Event::WindowEvent {

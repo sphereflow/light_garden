@@ -14,11 +14,12 @@ bytemuck = "1"
 log = "0.4"
 chrono = "0.4"
 futures-lite = "1.11"
-egui = "0.9"
-epi = "0.9"
+egui = "0.10"
+epi = "0.10"
 egui_winit_platform = {git = "https://github.com/hasenbanck/egui_winit_platform"}
 winit = { version = "0.24", features = ["web-sys"] }
 cgmath = "0.17"
+instant = "0.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wgpu-subscriber = "0.1"

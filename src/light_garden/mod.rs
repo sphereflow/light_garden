@@ -1,13 +1,12 @@
 extern crate nalgebra as na;
 
 use collision2d::geo::*;
+use instant::Instant;
 pub use light::*;
 use na::{distance, Point2};
 pub use object::*;
 use rayon::prelude::*;
 use std::collections::VecDeque;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Instant;
 
 pub mod light;
 pub mod object;
@@ -326,6 +325,21 @@ impl LightGarden {
         self.mode = Mode::NoMode;
     }
 
+    pub fn copy_selected(&mut self) {
+        if let Some(ix) = self.selected_object {
+            let mut cpy = self.objects[ix].clone();
+            let pos = cpy.get_origin();
+            cpy.set_origin(pos + V2::new(0.05, 0.05));
+            self.objects.push(cpy);
+        }
+        if let Some(ix) = self.selected_light {
+            let mut cpy = self.lights[ix].clone();
+            let pos = cpy.get_origin();
+            cpy.set_origin(pos + V2::new(0.05, 0.05));
+            self.lights.push(cpy);
+        }
+    }
+
     pub fn update_tick(&mut self, _frame_time: f64) {}
 
     pub fn get_render_to_texture(&self) -> bool {
@@ -401,7 +415,6 @@ impl LightGarden {
     }
 
     pub fn trace_all(&mut self) -> Vec<(P2, Color)> {
-        #[cfg(not(target_arch = "wasm32"))]
         let instant_start = Instant::now();
         if let Some(dro) = self.drawing_object.clone() {
             self.objects.push(dro);
@@ -462,13 +475,10 @@ impl LightGarden {
             }
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.trace_time_vd
-                .push_back(instant_start.elapsed().as_micros() as f64 / 1000.0);
-            if self.trace_time_vd.len() > 20 {
-                self.trace_time_vd.pop_front();
-            }
+        self.trace_time_vd
+            .push_back(instant_start.elapsed().as_micros() as f64 / 1000.0);
+        if self.trace_time_vd.len() > 20 {
+            self.trace_time_vd.pop_front();
         }
 
         all_lines

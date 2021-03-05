@@ -3,14 +3,12 @@ use collision2d::geo::*;
 use egui::*;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use epi::*;
-#[cfg(not(target_arch = "wasm32"))]
-use std::time::Instant;
+use instant::Instant;
 use wgpu::{BlendFactor, BlendOperation};
 
 pub struct Gui {
     pub platform: Platform,
     pub scale_factor: f32,
-    #[cfg(not(target_arch = "wasm32"))]
     last_update_inst: Instant,
     last_cursor: Option<Pos2>,
     pub app: LightGarden,
@@ -27,7 +25,6 @@ impl Gui {
             font_definitions: FontDefinitions::default(),
             style: Default::default(),
         });
-        #[cfg(not(target_arch = "wasm32"))]
         let last_update_inst = Instant::now();
         let app = LightGarden::new(
             collision2d::geo::Rect::from_tlbr(1., -1., -1., 1.),
@@ -37,7 +34,6 @@ impl Gui {
         Gui {
             platform,
             scale_factor: winit_window.scale_factor() as f32,
-            #[cfg(not(target_arch = "wasm32"))]
             last_update_inst,
             last_cursor: None,
             app,
@@ -47,7 +43,6 @@ impl Gui {
 
     pub fn gui(&mut self) -> Vec<egui::ClippedMesh> {
         use egui::*;
-        #[cfg(not(target_arch = "wasm32"))]
         let elapsed = self.last_update_inst.elapsed();
         self.platform.begin_frame();
         let ctx = self.platform.context();
@@ -83,18 +78,12 @@ impl Gui {
                         UiMode::Exiting => {}
                     }
 
-                    #[cfg(not(target_arch = "wasm32"))]
-                    {
-                        ui.label(format!("Frametime: {:?}", elapsed));
-                        ui.label(format!("Average Trace Time: {}", self.app.get_trace_time()));
-                    }
+                    ui.label(format!("Frametime: {:?}", elapsed));
+                    ui.label(format!("Average Trace Time: {}", self.app.get_trace_time()));
                 });
         }
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            self.last_update_inst = Instant::now();
-        }
+        self.last_update_inst = Instant::now();
 
         let (_output, paint_commands) = self.platform.end_frame();
         ctx.tessellate(paint_commands)
@@ -122,6 +111,10 @@ impl Gui {
         }
         if ui.button("(E)dit").clicked() {
             self.ui_mode = UiMode::Edit;
+        }
+
+        if ui.button("(C)opy").clicked() {
+            self.app.copy_selected();
         }
 
         if ui.button("(D)elete").clicked() {
@@ -387,6 +380,7 @@ impl Gui {
                             self.ui_mode = UiMode::Main;
                         }
                         (Some(Key::M), UiMode::Selected) => self.app.mode = Mode::Move,
+                        (Some(Key::C), UiMode::Selected) => self.app.copy_selected(),
 
                         (Some(Key::Q), _) => self.ui_mode = UiMode::Exiting,
 
