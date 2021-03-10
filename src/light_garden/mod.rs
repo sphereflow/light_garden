@@ -6,7 +6,7 @@ pub use light::*;
 use na::{distance, Point2};
 pub use object::*;
 use rayon::prelude::*;
-use std::collections::VecDeque;
+use std::{collections::VecDeque, f64::consts::FRAC_PI_4};
 
 pub mod light;
 pub mod object;
@@ -18,6 +18,7 @@ pub struct LightGarden {
     pub num_rays: u32,
     pub objects: Vec<Object>,
     drawing_object: Option<Object>,
+    drawing_light: Option<Light>,
     pub selected_object: Option<usize>,
     pub selected_light: Option<usize>,
     pub selected_color: Color,
@@ -35,7 +36,7 @@ pub struct LightGarden {
 
 impl LightGarden {
     pub fn new(canvas_bounds: Rect, descriptor_format: wgpu::TextureFormat) -> LightGarden {
-        let light = Light::PointLight(PointLight::new(Point2::new(-0.1, 0.1), 10000, [0.1; 4]));
+        let light = Light::PointLight(PointLight::new(Point2::new(-0.1, 0.1), 10000, [0.01; 4]));
         let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8, 5.);
         let mut cubic1 = CubicBezier::new_sample();
         cubic1.scale(0.5, 0.5);
@@ -62,6 +63,7 @@ impl LightGarden {
             lights: vec![light],
             objects: vec![lens, curved_mirror1, curved_mirror2],
             drawing_object: None,
+            drawing_light: None,
             selected_object: None,
             selected_light: None,
             color_state_descriptor,
@@ -69,8 +71,8 @@ impl LightGarden {
             max_bounce: 5,
             num_rays: 2000,
             canvas_bounds,
-            selected_color: [0.05, 0.05, 0.05, 0.01],
-            cutoff_color: [0.01; 4],
+            selected_color: [0.02, 0.03, 0.05, 0.01],
+            cutoff_color: [0.001; 4],
             render_to_texture: true,
             ray_width: 1.0,
             mode: Mode::NoMode,
@@ -116,6 +118,42 @@ impl LightGarden {
                 ));
             }
 
+            Mode::DrawPointLight => {
+                self.drawing_light = Some(Light::PointLight(PointLight::new(
+                    self.mouse_pos,
+                    self.num_rays,
+                    self.selected_color,
+                )));
+            }
+
+            Mode::DrawSpotLightStart => {
+                self.drawing_light = Some(Light::SpotLight(SpotLight::new(
+                    self.mouse_pos,
+                    FRAC_PI_4,
+                    V2::new(1., 0.),
+                    self.num_rays,
+                    self.selected_color,
+                )));
+            }
+
+            Mode::DrawSpotLightEnd { origin } => {
+                self.drawing_light = Some(Light::SpotLight(SpotLight::new(
+                    origin,
+                    FRAC_PI_4,
+                    self.mouse_pos - origin,
+                    self.num_rays,
+                    self.selected_color,
+                )));
+            }
+
+            Mode::DrawDirectionalLightEnd { start } => {
+                self.drawing_light = Some(Light::DirectionalLight(DirectionalLight::new(
+                    self.selected_color,
+                    self.num_rays,
+                    LineSegment::from_ab(start, self.mouse_pos),
+                )));
+            }
+
             Mode::Move => {
                 let mouse_pos = self.mouse_pos;
                 if let Some(obj) = self.get_selected_object() {
@@ -129,7 +167,13 @@ impl LightGarden {
             Mode::Rotate => {
                 let mouse_pos = self.mouse_pos;
                 if let Some(obj) = self.get_selected_object() {
-                    obj.x_axis_look_at(&mouse_pos);
+                    obj.y_axis_look_at(&mouse_pos);
+                }
+                if let Some(Light::SpotLight(spot)) = self.get_selected_light() {
+                    spot.x_axis_look_at(&mouse_pos);
+                }
+                if let Some(Light::DirectionalLight(directional_light)) = self.get_selected_light() {
+                    directional_light.y_axis_look_at(&mouse_pos);
                 }
             }
 
@@ -226,6 +270,42 @@ impl LightGarden {
                     self.num_rays,
                     self.selected_color,
                 )));
+                self.drawing_light = None;
+                self.mode = Mode::NoMode;
+            }
+
+            Mode::DrawSpotLightStart => {
+                self.mode = Mode::DrawSpotLightEnd {
+                    origin: self.mouse_pos,
+                };
+            }
+
+            Mode::DrawSpotLightEnd { origin } => {
+                self.lights.push(Light::SpotLight(SpotLight::new(
+                    origin,
+                    std::f64::consts::FRAC_PI_4,
+                    self.mouse_pos - origin,
+                    self.num_rays,
+                    self.selected_color,
+                )));
+                self.drawing_light = None;
+                self.mode = Mode::NoMode;
+            }
+
+            Mode::DrawDirectionalLightStart => {
+                self.mode = Mode::DrawDirectionalLightEnd {
+                    start: self.mouse_pos,
+                };
+            }
+
+            Mode::DrawDirectionalLightEnd { start } => {
+                self.lights
+                    .push(Light::DirectionalLight(DirectionalLight::new(
+                        self.selected_color,
+                        self.num_rays,
+                        LineSegment::from_ab(start, self.mouse_pos),
+                    )));
+                self.drawing_light = None;
                 self.mode = Mode::NoMode;
             }
 
@@ -416,8 +496,11 @@ impl LightGarden {
 
     pub fn trace_all(&mut self) -> Vec<(P2, Color)> {
         let instant_start = Instant::now();
-        if let Some(dro) = self.drawing_object.clone() {
-            self.objects.push(dro);
+        if let Some(dro) = self.drawing_object.as_ref() {
+            self.objects.push(dro.clone());
+        }
+        if let Some(drl) = self.drawing_light.as_ref() {
+            self.lights.push(drl.clone());
         }
         let mut all_lines: Vec<(P2, Color)> = Vec::new();
         for light in self.lights.iter() {
@@ -451,6 +534,9 @@ impl LightGarden {
         }
         if self.drawing_object.is_some() {
             self.objects.pop();
+        }
+        if self.drawing_light.is_some() {
+            self.lights.pop();
         }
 
         // fill limit testing
@@ -608,4 +694,8 @@ pub enum Mode {
     DrawRectStart,
     DrawRectEnd { start: P2 },
     DrawPointLight,
+    DrawSpotLightStart,
+    DrawSpotLightEnd { origin: P2 },
+    DrawDirectionalLightStart,
+    DrawDirectionalLightEnd { start: P2 },
 }

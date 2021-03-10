@@ -4,6 +4,7 @@ use egui::*;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use epi::*;
 use instant::Instant;
+use std::f64::consts::PI;
 use wgpu::{BlendFactor, BlendOperation};
 
 pub struct Gui {
@@ -66,9 +67,6 @@ impl Gui {
                         UiMode::Add => {
                             self.add(ui);
                         }
-                        UiMode::Edit => {
-                            self.edit(ui);
-                        }
                         UiMode::Selected => {
                             self.selected(ui);
                         }
@@ -109,9 +107,6 @@ impl Gui {
         if let Some(obj) = self.app.get_selected_object() {
             Gui::edit_object(obj, ui);
         }
-        if ui.button("(E)dit").clicked() {
-            self.ui_mode = UiMode::Edit;
-        }
 
         if ui.button("(C)opy").clicked() {
             self.app.copy_selected();
@@ -121,6 +116,8 @@ impl Gui {
             self.app.delete_selected();
             self.ui_mode = UiMode::Main;
         }
+
+        self.edit(ui);
 
         if let Some(light) = self.app.get_selected_light() {
             Gui::edit_light(light, ui);
@@ -139,12 +136,29 @@ impl Gui {
             let rgba = Rgba::from(color);
             self.app.selected_color = [rgba[0], rgba[1], rgba[2], rgba[3]];
         }
+
+        if let Some(Light::SpotLight(_)) = self.app.get_selected_light() {
+            if ui.button("(R)otate").clicked() {
+                self.app.mode = Mode::Rotate;
+            }
+        }
+        if let Some(Light::DirectionalLight(_)) = self.app.get_selected_light() {
+            if ui.button("(R)otate").clicked() {
+                self.app.mode = Mode::Rotate;
+            }
+        }
     }
 
     fn add(&mut self, ui: &mut Ui) {
         if self.ui_mode == UiMode::Add {
             if ui.button("Add (P)oint Light").clicked() {
                 self.app.mode = Mode::DrawPointLight;
+            }
+            if ui.button("Add (S)pot Light").clicked() {
+                self.app.mode = Mode::DrawSpotLightStart;
+            }
+            if ui.button("Add (D)irectionalLight").clicked() {
+                self.app.mode = Mode::DrawDirectionalLightStart;
             }
             if ui.button("Add (R)ect").clicked() {
                 self.app.mode = Mode::DrawRectStart;
@@ -191,12 +205,31 @@ impl Gui {
     }
 
     fn edit_light(light: &mut Light, ui: &mut Ui) {
+        let mut update_light = false;
+        match light {
+            Light::PointLight(_point) => { /* no user interface elements to add */ }
+            Light::SpotLight(spot) => {
+                // spot angle
+                let mut spot_angle = spot.spot_angle * 180. / PI;
+                let old_spot_angle = spot_angle;
+                ui.add(Slider::f64(&mut spot_angle, 0.0..=360.0).text("Spot Angle"));
+                if spot_angle != old_spot_angle {
+                    spot.spot_angle = spot_angle * PI / 180.;
+                    update_light = true;
+                }
+            }
+            Light::DirectionalLight(_direction) => {}
+        }
+
+        // num rays
         let mut num_rays_mut = light.get_num_rays();
         let num_rays = num_rays_mut;
-        ui.add(Slider::u32(&mut num_rays_mut, 1..=10000).text("Num Rays"));
-        if num_rays != num_rays_mut {
+        ui.add(Slider::u32(&mut num_rays_mut, 1..=30000).text("Num Rays"));
+        if num_rays != num_rays_mut || update_light {
             light.set_num_rays(num_rays_mut);
         }
+
+        // light color
         let lc = light.get_color();
         let mut color = Color32::from(Rgba::from_rgba_premultiplied(lc[0], lc[1], lc[2], lc[3]));
         egui::widgets::color_picker::color_edit_button_srgba(
@@ -206,14 +239,6 @@ impl Gui {
         );
         let rgba = Rgba::from(color);
         light.set_color(rgba[0], rgba[1], rgba[2], rgba[3]);
-
-        match light {
-            Light::PointLight(_point) => { /* no user interface elements to add */ }
-            Light::SpotLight(spot) => {
-                ui.add(Slider::f64(&mut spot.spot_angle, 0.0..=360.0).text("Spot Angle"));
-            }
-            Light::DirectionalLight(_direction) => {}
-        }
     }
 
     fn edit_object(object: &mut Object, ui: &mut Ui) {
@@ -342,7 +367,6 @@ impl Gui {
                         (Some(Key::Escape), ui_mode) => match ui_mode {
                             UiMode::Main => {}
                             UiMode::Add => self.ui_mode = UiMode::Main,
-                            UiMode::Edit => self.ui_mode = UiMode::Selected,
                             UiMode::Selected => {
                                 self.app.deselect();
                                 self.ui_mode = UiMode::Main;
@@ -358,28 +382,30 @@ impl Gui {
                         (Some(Key::E), UiMode::Main) => self.ui_mode = UiMode::Settings,
 
                         (Some(Key::P), UiMode::Add) => self.app.mode = Mode::DrawPointLight,
+                        (Some(Key::S), UiMode::Add) => self.app.mode = Mode::DrawSpotLightStart,
+                        (Some(Key::D), UiMode::Add) => {
+                            self.app.mode = Mode::DrawDirectionalLightStart
+                        }
+
                         (Some(Key::R), UiMode::Add) => self.app.mode = Mode::DrawRectStart,
                         (Some(Key::C), UiMode::Add) => self.app.mode = Mode::DrawCircleStart,
                         (Some(Key::M), UiMode::Add) => self.app.mode = Mode::DrawMirrorStart,
 
-                        (Some(Key::M), UiMode::Edit) => self.app.mode = Mode::Move,
-                        (Some(Key::R), UiMode::Edit) => self.app.mode = Mode::Rotate,
-                        (Some(Key::A), UiMode::Edit) => {
+                        (Some(Key::M), UiMode::Selected) => self.app.mode = Mode::Move,
+                        (Some(Key::R), UiMode::Selected) => self.app.mode = Mode::Rotate,
+                        (Some(Key::A), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::And))
                         }
-                        (Some(Key::O), UiMode::Edit) => {
+                        (Some(Key::O), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::Or))
                         }
-                        (Some(Key::N), UiMode::Edit) => {
+                        (Some(Key::N), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::AndNot))
                         }
-
-                        (Some(Key::E), UiMode::Selected) => self.ui_mode = UiMode::Edit,
                         (Some(Key::D), UiMode::Selected) => {
                             self.app.delete_selected();
                             self.ui_mode = UiMode::Main;
                         }
-                        (Some(Key::M), UiMode::Selected) => self.app.mode = Mode::Move,
                         (Some(Key::C), UiMode::Selected) => self.app.copy_selected(),
 
                         (Some(Key::Q), _) => self.ui_mode = UiMode::Exiting,
@@ -418,7 +444,6 @@ impl Gui {
 pub enum UiMode {
     Main,
     Add,
-    Edit,
     Selected,
     Settings,
     Exiting,
