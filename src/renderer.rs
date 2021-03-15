@@ -66,7 +66,7 @@ impl Renderer {
         });
 
         // set new canvas bounds
-        app.canvas_bounds = Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64);
+        app.resize(&Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64));
 
         // write to the projection matix buffer
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {

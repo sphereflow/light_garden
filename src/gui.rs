@@ -202,6 +202,13 @@ impl Gui {
         self.edit_cutoff_color(ui);
 
         self.toggle_render_to_texture(ui);
+
+        // toggle snap to grid
+        ui.add(Checkbox::new(&mut self.app.grid.on, "snap to grid"));
+
+        self.grid_size(ui);
+
+        self.edit_grid_color(ui);
     }
 
     fn edit_light(light: &mut Light, ui: &mut Ui) {
@@ -239,6 +246,18 @@ impl Gui {
         );
         let rgba = Rgba::from(color);
         light.set_color(rgba[0], rgba[1], rgba[2], rgba[3]);
+    }
+
+    fn edit_grid_color(&mut self, ui: &mut Ui) {
+        let c = self.app.grid.get_color();
+        let mut color = Color32::from(Rgba::from_rgba_premultiplied(c[0], c[1], c[2], c[3]));
+        egui::widgets::color_picker::color_edit_button_srgba(
+            ui,
+            &mut color,
+            color_picker::Alpha::OnlyBlend,
+        );
+        let rgba = Rgba::from(color);
+        self.app.grid.set_color([rgba[0], rgba[1], rgba[2], rgba[3]]);
     }
 
     fn edit_object(object: &mut Object, ui: &mut Ui) {
@@ -352,6 +371,12 @@ impl Gui {
         self.app.set_render_to_texture(render_to_texture);
     }
 
+    pub fn grid_size(&mut self, ui: &mut Ui) {
+        let mut grid_size = self.app.grid.get_dist();
+        ui.add(Slider::f64(&mut grid_size, 0.01..=0.1).text("Grid size"));
+        self.app.grid.set_dist(grid_size, &self.app.get_canvas_bounds());
+    }
+
     pub fn update(
         &mut self,
         event: &winit::event::WindowEvent,
@@ -416,8 +441,9 @@ impl Gui {
             }
 
             WindowEvent::CursorMoved { position, .. } => {
+                let aspect = sc_desc.width as f64 / sc_desc.height as f64;
                 self.app.update_mouse_position(nalgebra::Point2::new(
-                    (2. * position.x / (sc_desc.width as f64)) - 1.,
+                    ((2. * position.x / (sc_desc.width as f64)) - 1.) * aspect,
                     (2. * -position.y / (sc_desc.height as f64)) + 1.,
                 ));
             }
@@ -434,6 +460,7 @@ impl Gui {
                 ..
             } => {
                 self.app.deselect();
+                self.ui_mode = UiMode::Main;
             }
             _ => {}
         }

@@ -1,6 +1,7 @@
 extern crate nalgebra as na;
 
 use collision2d::geo::*;
+use grid::Grid;
 use instant::Instant;
 pub use light::*;
 use na::{distance, Point2};
@@ -8,6 +9,7 @@ pub use object::*;
 use rayon::prelude::*;
 use std::{collections::VecDeque, f64::consts::FRAC_PI_4};
 
+pub mod grid;
 pub mod light;
 pub mod object;
 
@@ -24,7 +26,7 @@ pub struct LightGarden {
     pub selected_color: Color,
     pub color_state_descriptor: wgpu::ColorTargetState,
     pub recreate_pipeline: bool,
-    pub canvas_bounds: Rect,
+    canvas_bounds: Rect,
     pub ray_width: f64,
     pub mode: Mode,
     pub refractive_index: Float,
@@ -32,6 +34,7 @@ pub struct LightGarden {
     pub cutoff_color: Color,
     render_to_texture: bool,
     trace_time_vd: VecDeque<f64>,
+    pub grid: Grid,
 }
 
 impl LightGarden {
@@ -79,13 +82,13 @@ impl LightGarden {
             refractive_index: 2.,
             chunk_size: 100,
             trace_time_vd: VecDeque::new(),
+            grid: Grid::new(&canvas_bounds),
         }
     }
 
     pub fn update_mouse_position(&mut self, position: P2) {
         self.mouse_pos = position;
-        let aspect = self.canvas_bounds.width / self.canvas_bounds.height;
-        self.mouse_pos.x *= aspect;
+        self.grid.snap_to_grid(&mut self.mouse_pos);
         if !self.canvas_bounds.contains(&self.mouse_pos) {
             return;
         }
@@ -172,13 +175,23 @@ impl LightGarden {
                 if let Some(Light::SpotLight(spot)) = self.get_selected_light() {
                     spot.x_axis_look_at(&mouse_pos);
                 }
-                if let Some(Light::DirectionalLight(directional_light)) = self.get_selected_light() {
+                if let Some(Light::DirectionalLight(directional_light)) = self.get_selected_light()
+                {
                     directional_light.y_axis_look_at(&mouse_pos);
                 }
             }
 
             _ => {}
         }
+    }
+
+    pub fn resize(&mut self, bounds: &Rect) {
+        self.canvas_bounds = *bounds;
+        self.grid.update_canvas_bounds(bounds);
+    }
+
+    pub fn get_canvas_bounds(&self) -> Rect {
+        self.canvas_bounds
     }
 
     pub fn mouse_clicked(&mut self) {
@@ -560,6 +573,9 @@ impl LightGarden {
                 all_lines.push((cm.cubic.points[3], red));
             }
         }
+
+        // draw grid
+        all_lines.extend(self.grid.get_render_lines());
 
         self.trace_time_vd
             .push_back(instant_start.elapsed().as_micros() as f64 / 1000.0);
