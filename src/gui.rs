@@ -112,6 +112,14 @@ impl Gui {
             self.app.copy_selected();
         }
 
+        if ui.button("Mirror on (X) axis").clicked() {
+            self.app.mirror_on_x_axis_selected();
+        }
+
+        if ui.button("Mirror on (Y) axis").clicked() {
+            self.app.mirror_on_y_axis_selected();
+        }
+
         if ui.button("(D)elete").clicked() {
             self.app.delete_selected();
             self.ui_mode = UiMode::Main;
@@ -257,7 +265,9 @@ impl Gui {
             color_picker::Alpha::OnlyBlend,
         );
         let rgba = Rgba::from(color);
-        self.app.grid.set_color([rgba[0], rgba[1], rgba[2], rgba[3]]);
+        self.app
+            .grid
+            .set_color([rgba[0], rgba[1], rgba[2], rgba[3]]);
     }
 
     fn edit_object(object: &mut Object, ui: &mut Ui) {
@@ -374,7 +384,9 @@ impl Gui {
     pub fn grid_size(&mut self, ui: &mut Ui) {
         let mut grid_size = self.app.grid.get_dist();
         ui.add(Slider::f64(&mut grid_size, 0.01..=0.1).text("Grid size"));
-        self.app.grid.set_dist(grid_size, &self.app.get_canvas_bounds());
+        self.app
+            .grid
+            .set_dist(grid_size, &self.app.get_canvas_bounds());
     }
 
     pub fn update(
@@ -432,6 +444,8 @@ impl Gui {
                             self.ui_mode = UiMode::Main;
                         }
                         (Some(Key::C), UiMode::Selected) => self.app.copy_selected(),
+                        (Some(Key::X), UiMode::Selected) => self.app.mirror_on_x_axis_selected(),
+                        (Some(Key::Y), UiMode::Selected) => self.app.mirror_on_y_axis_selected(),
 
                         (Some(Key::Q), _) => self.ui_mode = UiMode::Exiting,
 

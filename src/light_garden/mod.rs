@@ -433,6 +433,18 @@ impl LightGarden {
         }
     }
 
+    pub fn mirror_on_x_axis_selected(&mut self) {
+        if let Some(ix) = self.selected_object {
+            self.objects.push(self.objects[ix].mirror_y());
+        }
+    }
+
+    pub fn mirror_on_y_axis_selected(&mut self) {
+        if let Some(ix) = self.selected_object {
+            self.objects.push(self.objects[ix].mirror_x());
+        }
+    }
+
     pub fn update_tick(&mut self, _frame_time: f64) {}
 
     pub fn get_render_to_texture(&self) -> bool {
@@ -628,7 +640,7 @@ impl LightGarden {
                 if let Some((intersection, normal, index)) = nearest_target {
                     let obj = self.objects[index].clone();
                     match obj {
-                        Object::Mirror(_) | Object::CurvedMirror(_) => {
+                        Object::StraightMirror(_) | Object::CurvedMirror(_) => {
                             rays.push((ray.get_origin(), *color));
                             rays.push((intersection, *color));
                             back_buffer.push((

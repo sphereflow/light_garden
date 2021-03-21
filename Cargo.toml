@@ -36,3 +36,7 @@ js-sys = "0.3.46"
 
 [dependencies.collision2d]
 git = "https://github.com/sphereflow/collision2d"
+
+# for local development
+# [patch."https://github.com/sphereflow/collision2d"]
+# collision2d = { path = "../collision2d" }

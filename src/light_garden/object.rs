@@ -1,9 +1,8 @@
-use collision2d::geo::traits::*;
 use collision2d::geo::*;
 
 #[derive(Debug, Clone)]
 pub enum Object {
-    Mirror(Mirror),
+    StraightMirror(StraightMirror),
     CurvedMirror(CurvedMirror),
     Circle(Circle, Material),
     Rect(Rect, Material),
@@ -13,7 +12,7 @@ pub enum Object {
 
 impl Object {
     pub fn new_mirror(a: P2, b: P2) -> Self {
-        Object::Mirror(Mirror::new(LineSegment::from_ab(a, b)))
+        Object::StraightMirror(StraightMirror::new(LineSegment::from_ab(a, b)))
     }
     pub fn new_circle(origin: P2, radius: Float, refractive_index: Float) -> Self {
         Object::Circle(Circle { origin, radius }, Material { refractive_index })
@@ -35,7 +34,7 @@ impl Object {
     }
     pub fn get_material(&self) -> Material {
         match self {
-            Object::Mirror(_) => Material::default(),
+            Object::StraightMirror(_) => Material::default(),
             Object::CurvedMirror(_) => Material::default(),
             Object::Circle(_, m) => *m,
             Object::Rect(_, m) => *m,
@@ -45,7 +44,7 @@ impl Object {
     }
     pub fn material_mut(&mut self) -> Option<&mut Material> {
         match self {
-            Object::Mirror(_) => None,
+            Object::StraightMirror(_) => None,
             Object::CurvedMirror(_) => None,
             Object::Circle(_, m) => Some(m),
             Object::Rect(_, m) => Some(m),
@@ -58,7 +57,7 @@ impl Object {
 impl HasOrigin for Object {
     fn get_origin(&self) -> P2 {
         match self {
-            Object::Mirror(m) => m.line_segment.get_origin(),
+            Object::StraightMirror(m) => m.line_segment.get_origin(),
             Object::CurvedMirror(cm) => cm.cubic.get_origin(),
             Object::Circle(c, _) => c.get_origin(),
             Object::Rect(r, _) => r.get_origin(),
@@ -68,7 +67,7 @@ impl HasOrigin for Object {
     }
     fn set_origin(&mut self, origin: P2) {
         match self {
-            Object::Mirror(m) => m.line_segment.set_origin(origin),
+            Object::StraightMirror(m) => m.line_segment.set_origin(origin),
             Object::CurvedMirror(cm) => cm.cubic.set_origin(origin),
             Object::Circle(c, _) => c.set_origin(origin),
             Object::Rect(r, _) => r.set_origin(origin),
@@ -81,7 +80,7 @@ impl HasOrigin for Object {
 impl Rotate for Object {
     fn get_rotation(&self) -> Rot2 {
         match self {
-            Object::Mirror(m) => m.line_segment.get_rotation(),
+            Object::StraightMirror(m) => m.line_segment.get_rotation(),
             Object::CurvedMirror(cm) => cm.cubic.get_rotation(),
             Object::Circle(c, _) => c.get_rotation(),
             Object::Rect(r, _) => r.get_rotation(),
@@ -91,7 +90,7 @@ impl Rotate for Object {
     }
     fn set_rotation(&mut self, rotation: &Rot2) {
         match self {
-            Object::Mirror(m) => m.line_segment.set_rotation(rotation),
+            Object::StraightMirror(m) => m.line_segment.set_rotation(rotation),
             Object::CurvedMirror(cm) => cm.cubic.set_rotation(rotation),
             Object::Circle(c, _) => c.set_rotation(rotation),
             Object::Rect(r, _) => r.set_rotation(rotation),
@@ -101,10 +100,33 @@ impl Rotate for Object {
     }
 }
 
+impl Mirror for Object {
+    fn mirror_x(&self) -> Self {
+        match self {
+            Object::StraightMirror(m) => Object::StraightMirror(m.mirror_x()),
+            Object::CurvedMirror(cm) => Object::CurvedMirror(cm.mirror_x()),
+            Object::Circle(c, material) => Object::Circle(c.mirror_x(), *material),
+            Object::Rect(r, material) => Object::Rect(r.mirror_x(), *material),
+            Object::Lens(l, material) => Object::Lens(l.mirror_x(), *material),
+            Object::Geo(g, material) => Object::Geo(g.mirror_x(), *material),
+        }
+    }
+    fn mirror_y(&self) -> Self {
+        match self {
+            Object::StraightMirror(m) => Object::StraightMirror(m.mirror_y()),
+            Object::CurvedMirror(cm) => Object::CurvedMirror(cm.mirror_y()),
+            Object::Circle(c, material) => Object::Circle(c.mirror_y(), *material),
+            Object::Rect(r, material) => Object::Rect(r.mirror_y(), *material),
+            Object::Lens(l, material) => Object::Lens(l.mirror_y(), *material),
+            Object::Geo(g, material) => Object::Geo(g.mirror_y(), *material),
+        }
+    }
+}
+
 impl Contains for Object {
     fn contains(&self, p: &P2) -> bool {
         match self {
-            Object::Mirror(_) => false,
+            Object::StraightMirror(_) => false,
             Object::CurvedMirror(_) => false,
             Object::Circle(c, _) => c.contains(p),
             Object::Rect(r, _) => r.contains(p),
@@ -117,7 +139,7 @@ impl Contains for Object {
 impl Distance for Object {
     fn distance(&self, p: &P2) -> Float {
         match self {
-            Object::Mirror(m) => m.line_segment.distance(p),
+            Object::StraightMirror(m) => m.line_segment.distance(p),
             Object::CurvedMirror(cm) => distance(&cm.cubic.get_origin(), p),
             Object::Circle(c, _) => c.distance(p),
             Object::Rect(r, _) => r.distance(p),
@@ -130,7 +152,7 @@ impl Distance for Object {
 impl HasGeometry for Object {
     fn get_geometry(&self) -> Geo {
         match self {
-            Object::Mirror(mirror) => mirror.get_geometry(),
+            Object::StraightMirror(mirror) => mirror.get_geometry(),
             Object::CurvedMirror(cm) => cm.get_geometry(),
             Object::Circle(c, _material) => Geo::GeoCircle(*c),
             Object::Rect(r, _material) => Geo::GeoRect(*r),
@@ -141,17 +163,30 @@ impl HasGeometry for Object {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Mirror {
+pub struct StraightMirror {
     pub line_segment: LineSegment,
 }
 
-impl Mirror {
+impl StraightMirror {
     pub fn new(line_segment: LineSegment) -> Self {
-        Mirror { line_segment }
+        StraightMirror { line_segment }
     }
 }
 
-impl HasGeometry for Mirror {
+impl Mirror for StraightMirror {
+    fn mirror_x(&self) -> Self {
+        StraightMirror {
+            line_segment: self.line_segment.mirror_x(),
+        }
+    }
+    fn mirror_y(&self) -> Self {
+        StraightMirror {
+            line_segment: self.line_segment.mirror_y(),
+        }
+    }
+}
+
+impl HasGeometry for StraightMirror {
     fn get_geometry(&self) -> Geo {
         Geo::GeoLineSegment(self.line_segment)
     }
@@ -165,6 +200,19 @@ pub struct CurvedMirror {
 impl CurvedMirror {
     pub fn new(cubic: CubicBezier) -> Self {
         CurvedMirror { cubic }
+    }
+}
+
+impl Mirror for CurvedMirror {
+    fn mirror_x(&self) -> Self {
+        CurvedMirror {
+            cubic: self.cubic.mirror_x(),
+        }
+    }
+    fn mirror_y(&self) -> Self {
+        CurvedMirror {
+            cubic: self.cubic.mirror_y(),
+        }
     }
 }
 
@@ -201,6 +249,19 @@ impl Lens {
     }
     pub fn get_logic(&self) -> Logic {
         self.l.clone()
+    }
+}
+
+impl Mirror for Lens {
+    fn mirror_x(&self) -> Self {
+        Lens {
+            l: self.l.mirror_x(),
+        }
+    }
+    fn mirror_y(&self) -> Self {
+        Lens {
+            l: self.l.mirror_y(),
+        }
     }
 }
 
