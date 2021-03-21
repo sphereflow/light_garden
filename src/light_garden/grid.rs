@@ -7,6 +7,7 @@ pub struct Grid {
     bottom_left: P2,
     color: Color,
     pub on: bool,
+    pub show: bool,
 }
 
 impl Grid {
@@ -17,6 +18,7 @@ impl Grid {
             bottom_left: -P2::new(bounds.width, bounds.height) * 0.5,
             color: [1.; 4],
             on: false,
+            show: false,
         };
         res.update_canvas_bounds(bounds);
         res
@@ -61,7 +63,7 @@ impl Grid {
     }
 
     pub fn get_render_lines<'a>(&'a self) -> Box<dyn Iterator<Item = &'a (P2, Color)> + 'a> {
-        if self.on {
+        if self.show {
             Box::new(self.vertices.iter())
         } else {
             Box::new(std::iter::empty())

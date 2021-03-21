@@ -73,6 +73,9 @@ impl Gui {
                         UiMode::Settings => {
                             self.settings(ui);
                         }
+                        UiMode::Grid => {
+                            self.grid(ui);
+                        }
                         UiMode::Exiting => {}
                     }
 
@@ -97,6 +100,9 @@ impl Gui {
         }
         if ui.button("S(e)ttings").clicked() {
             self.ui_mode = UiMode::Settings;
+        }
+        if ui.button("(G)rid").clicked() {
+            self.ui_mode = UiMode::Grid;
         }
         if ui.button("(Q)it").clicked() {
             self.ui_mode = UiMode::Exiting;
@@ -210,12 +216,13 @@ impl Gui {
         self.edit_cutoff_color(ui);
 
         self.toggle_render_to_texture(ui);
+    }
 
+    fn grid(&mut self, ui: &mut Ui) {
         // toggle snap to grid
-        ui.add(Checkbox::new(&mut self.app.grid.on, "snap to grid"));
-
+        ui.add(Checkbox::new(&mut self.app.grid.show, "Show grid"));
+        ui.label("Snap to grid while pressing the left shift key");
         self.grid_size(ui);
-
         self.edit_grid_color(ui);
     }
 
@@ -399,7 +406,7 @@ impl Gui {
         type Key = event::VirtualKeyCode;
         match event {
             winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                if let winit::event::ElementState::Pressed = input.state {
+                if winit::event::ElementState::Released == input.state {
                     match (input.virtual_keycode, self.ui_mode) {
                         (Some(Key::Escape), ui_mode) => match ui_mode {
                             UiMode::Main => {}
@@ -409,6 +416,7 @@ impl Gui {
                                 self.ui_mode = UiMode::Main;
                             }
                             UiMode::Settings => self.ui_mode = UiMode::Main,
+                            UiMode::Grid => self.ui_mode = UiMode::Main,
                             UiMode::Exiting => {}
                         },
                         (Some(Key::A), UiMode::Main) => self.ui_mode = UiMode::Add,
@@ -452,6 +460,13 @@ impl Gui {
                         _ => {}
                     }
                 }
+                if let (Some(Key::LShift), winit::event::ElementState::Pressed) =
+                    (input.virtual_keycode, input.state)
+                {
+                    self.app.grid.on = true;
+                } else {
+                    self.app.grid.on = false;
+                }
             }
 
             WindowEvent::CursorMoved { position, .. } => {
@@ -487,6 +502,7 @@ pub enum UiMode {
     Add,
     Selected,
     Settings,
+    Grid,
     Exiting,
 }
 
