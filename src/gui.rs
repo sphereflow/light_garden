@@ -80,7 +80,7 @@ impl Gui {
                     }
 
                     ui.label(format!("Frametime: {:?}", elapsed));
-                    ui.label(format!("Average Trace Time: {}", self.app.get_trace_time()));
+                    ui.label(format!("Average Trace Time: {}", self.app.tracer.get_trace_time()));
                 });
         }
 
@@ -207,9 +207,9 @@ impl Gui {
     }
 
     fn settings(&mut self, ui: &mut Ui) {
-        let mut chunk_size = self.app.chunk_size as u32;
+        let mut chunk_size = self.app.tracer.chunk_size as u32;
         ui.add(Slider::u32(&mut chunk_size, 1..=1000).text("Rayon Chunk Size"));
-        self.app.chunk_size = chunk_size as usize;
+        self.app.tracer.chunk_size = chunk_size as usize;
 
         self.edit_blend(ui);
 
@@ -220,7 +220,7 @@ impl Gui {
 
     fn grid(&mut self, ui: &mut Ui) {
         // toggle snap to grid
-        ui.add(Checkbox::new(&mut self.app.grid.show, "Show grid"));
+        ui.add(Checkbox::new(&mut self.app.tracer.grid.show, "Show grid"));
         ui.label("Snap to grid while pressing the left shift key");
         self.grid_size(ui);
         self.edit_grid_color(ui);
@@ -264,7 +264,7 @@ impl Gui {
     }
 
     fn edit_grid_color(&mut self, ui: &mut Ui) {
-        let c = self.app.grid.get_color();
+        let c = self.app.tracer.grid.get_color();
         let mut color = Color32::from(Rgba::from_rgba_premultiplied(c[0], c[1], c[2], c[3]));
         egui::widgets::color_picker::color_edit_button_srgba(
             ui,
@@ -273,6 +273,7 @@ impl Gui {
         );
         let rgba = Rgba::from(color);
         self.app
+            .tracer
             .grid
             .set_color([rgba[0], rgba[1], rgba[2], rgba[3]]);
     }
@@ -288,7 +289,7 @@ impl Gui {
     }
 
     fn edit_blend(&mut self, ui: &mut Ui) {
-        ui.add(Slider::u32(&mut self.app.max_bounce, 1..=12).text("Max Bounce:"));
+        ui.add(Slider::u32(&mut self.app.tracer.max_bounce, 1..=12).text("Max Bounce:"));
         let blend_factors: &[BlendFactor] = &[
             BlendFactor::Zero,
             BlendFactor::One,
@@ -372,14 +373,14 @@ impl Gui {
     }
 
     pub fn edit_cutoff_color(&mut self, ui: &mut Ui) {
-        let mut color = self.app.cutoff_color;
+        let mut color = self.app.tracer.cutoff_color;
         let mut rgb = (color[0] + color[1] + color[2]) / 3.;
         ui.add(Slider::f32(&mut rgb, 0.00001..=0.05).text("Cutoff RGB"));
         color[0] = rgb;
         color[1] = rgb;
         color[2] = rgb;
         ui.add(Slider::f32(&mut color[3], 0.00001..=0.05).text("Cutoff Alpha"));
-        self.app.cutoff_color = color;
+        self.app.tracer.cutoff_color = color;
     }
 
     pub fn toggle_render_to_texture(&mut self, ui: &mut Ui) {
@@ -389,9 +390,10 @@ impl Gui {
     }
 
     pub fn grid_size(&mut self, ui: &mut Ui) {
-        let mut grid_size = self.app.grid.get_dist();
+        let mut grid_size = self.app.tracer.grid.get_dist();
         ui.add(Slider::f64(&mut grid_size, 0.01..=0.1).text("Grid size"));
         self.app
+            .tracer
             .grid
             .set_dist(grid_size, &self.app.get_canvas_bounds());
     }
@@ -463,9 +465,9 @@ impl Gui {
                 if let (Some(Key::LShift), winit::event::ElementState::Pressed) =
                     (input.virtual_keycode, input.state)
                 {
-                    self.app.grid.on = true;
+                    self.app.tracer.grid.on = true;
                 } else {
-                    self.app.grid.on = false;
+                    self.app.tracer.grid.on = false;
                 }
             }
 

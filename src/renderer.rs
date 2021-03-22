@@ -66,7 +66,7 @@ impl Renderer {
         });
 
         // set new canvas bounds
-        app.resize(&Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64));
+        app.tracer.resize(&Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64));
 
         // write to the projection matix buffer
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -373,7 +373,7 @@ impl Renderer {
         queue: &Queue,
         gui: &mut Gui,
     ) {
-        let vb = gui.app.trace_all();
+        let vb = gui.app.tracer.trace_all();
         // self.update_vertex_buffer_with_line_strips(device, &vb);
         self.update_vertex_buffer(device, &vb);
 
