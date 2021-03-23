@@ -7,6 +7,7 @@ pub use light::*;
 use na::{distance, Point2};
 pub use object::*;
 pub use tracer::*;
+pub use string_mod::*;
 use rayon::prelude::*;
 use std::{collections::VecDeque, f64::consts::FRAC_PI_4};
 
@@ -14,6 +15,7 @@ pub mod grid;
 pub mod light;
 pub mod object;
 pub mod tracer;
+pub mod string_mod;
 
 pub struct LightGarden {
     pub tracer: Tracer,

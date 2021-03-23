@@ -4,6 +4,7 @@ use egui::*;
 use egui_winit_platform::{Platform, PlatformDescriptor};
 use epi::*;
 use instant::Instant;
+use na::Complex;
 use std::f64::consts::PI;
 use wgpu::{BlendFactor, BlendOperation};
 
@@ -60,6 +61,10 @@ impl Gui {
                         ));
                     }
 
+                    if self.app.tracer.string_mod.on {
+                        self.ui_mode = UiMode::StringMod;
+                    }
+
                     match self.ui_mode {
                         UiMode::Main => {
                             self.main(ui);
@@ -76,11 +81,15 @@ impl Gui {
                         UiMode::Grid => {
                             self.grid(ui);
                         }
+                        UiMode::StringMod => self.string_mod(ui),
                         UiMode::Exiting => {}
                     }
 
                     ui.label(format!("Frametime: {:?}", elapsed));
-                    ui.label(format!("Average Trace Time: {}", self.app.tracer.get_trace_time()));
+                    ui.label(format!(
+                        "Average Trace Time: {}",
+                        self.app.tracer.get_trace_time()
+                    ));
                 });
         }
 
@@ -103,6 +112,10 @@ impl Gui {
         }
         if ui.button("(G)rid").clicked() {
             self.ui_mode = UiMode::Grid;
+        }
+        if ui.button("St(r)ing mod").clicked() {
+            self.ui_mode = UiMode::StringMod;
+            self.app.tracer.string_mod.on = true;
         }
         if ui.button("(Q)it").clicked() {
             self.ui_mode = UiMode::Exiting;
@@ -226,6 +239,52 @@ impl Gui {
         self.edit_grid_color(ui);
     }
 
+    fn string_mod(&mut self, ui: &mut Ui) {
+        let mut binit_complex = self.app.tracer.string_mod.init_complex.is_some();
+        ui.add(Checkbox::new(
+            &mut binit_complex,
+            "Initialize with complex value",
+        ));
+        if binit_complex {
+            let (re, im);
+            if let Some(c) = self.app.tracer.string_mod.init_complex {
+                re = c.re;
+                im = c.im;
+            } else {
+                re = 0.0;
+                im = 1.0;
+            }
+            let mut angle = (im / re).atan();
+            let mut init_len = V2::new(re, im).norm();
+            let mut nth_turn = (std::f64::consts::TAU / angle).round() as u64;
+            ui.add(
+                Slider::f64(&mut init_len, 0.9997..=1.0002)
+                    .text("Init length")
+                    .clamp_to_range(true),
+            );
+            ui.label("1/nth turn; n:");
+            ui.add(DragValue::u64(&mut nth_turn).clamp_range(4.0..=1000000.0));
+            angle = std::f64::consts::TAU / (nth_turn as f64);
+            let (im, re) = angle.sin_cos();
+            self.app.tracer.string_mod.init_complex = Some(Complex::new(re, im) * init_len);
+        } else {
+            self.app.tracer.string_mod.init_complex = None;
+        }
+        let mode = &mut self.app.tracer.string_mod.mode;
+        ui.radio_value(mode, StringModMode::Add, "Mode: Add");
+        ui.radio_value(mode, StringModMode::Mul, "Mode: Mul");
+        ui.radio_value(mode, StringModMode::Pow, "Mode: Pow");
+        ui.label("modulo");
+        ui.add(
+            DragValue::u64(&mut self.app.tracer.string_mod.modulo)
+                .speed(0.3)
+                .clamp_range(0.0..=50000.),
+        );
+        ui.label("num");
+        ui.add(DragValue::u64(&mut self.app.tracer.string_mod.num).speed(0.3));
+        self.edit_string_mod_color(ui);
+    }
+
     fn edit_light(light: &mut Light, ui: &mut Ui) {
         let mut update_light = false;
         match light {
@@ -276,6 +335,18 @@ impl Gui {
             .tracer
             .grid
             .set_color([rgba[0], rgba[1], rgba[2], rgba[3]]);
+    }
+
+    fn edit_string_mod_color(&mut self, ui: &mut Ui) {
+        let c = self.app.tracer.string_mod.color;
+        let mut color = Color32::from(Rgba::from_rgba_premultiplied(c[0], c[1], c[2], c[3]));
+        egui::widgets::color_picker::color_edit_button_srgba(
+            ui,
+            &mut color,
+            color_picker::Alpha::OnlyBlend,
+        );
+        let rgba = Rgba::from(color);
+        self.app.tracer.string_mod.color = [rgba[0], rgba[1], rgba[2], rgba[3]];
     }
 
     fn edit_object(object: &mut Object, ui: &mut Ui) {
@@ -419,6 +490,10 @@ impl Gui {
                             }
                             UiMode::Settings => self.ui_mode = UiMode::Main,
                             UiMode::Grid => self.ui_mode = UiMode::Main,
+                            UiMode::StringMod => {
+                                self.app.tracer.string_mod.on = false;
+                                self.ui_mode = UiMode::Main;
+                            }
                             UiMode::Exiting => {}
                         },
                         (Some(Key::A), UiMode::Main) => self.ui_mode = UiMode::Add,
@@ -427,6 +502,10 @@ impl Gui {
                             self.app.mode = Mode::Selecting(None)
                         }
                         (Some(Key::E), UiMode::Main) => self.ui_mode = UiMode::Settings,
+                        (Some(Key::R), UiMode::Main) => {
+                            self.app.tracer.string_mod.on = true;
+                            self.ui_mode = UiMode::StringMod;
+                        }
 
                         (Some(Key::P), UiMode::Add) => self.app.mode = Mode::DrawPointLight,
                         (Some(Key::S), UiMode::Add) => self.app.mode = Mode::DrawSpotLightStart,
@@ -505,6 +584,7 @@ pub enum UiMode {
     Selected,
     Settings,
     Grid,
+    StringMod,
     Exiting,
 }
 
