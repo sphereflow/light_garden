@@ -240,48 +240,22 @@ impl Gui {
     }
 
     fn string_mod(&mut self, ui: &mut Ui) {
-        let mut binit_complex = self.app.tracer.string_mod.init_complex.is_some();
-        ui.add(Checkbox::new(
-            &mut binit_complex,
-            "Initialize with complex value",
-        ));
-        if binit_complex {
-            let (re, im);
-            if let Some(c) = self.app.tracer.string_mod.init_complex {
-                re = c.re;
-                im = c.im;
-            } else {
-                re = 0.0;
-                im = 1.0;
-            }
-            let mut angle = (im / re).atan();
-            let mut init_len = V2::new(re, im).norm();
-            let mut nth_turn = (std::f64::consts::TAU / angle).round() as u64;
-            ui.add(
-                Slider::f64(&mut init_len, 0.9997..=1.0002)
-                    .text("Init length")
-                    .clamp_to_range(true),
-            );
-            ui.label("1/nth turn; n:");
-            ui.add(DragValue::u64(&mut nth_turn).clamp_range(4.0..=1000000.0));
-            angle = std::f64::consts::TAU / (nth_turn as f64);
-            let (im, re) = angle.sin_cos();
-            self.app.tracer.string_mod.init_complex = Some(Complex::new(re, im) * init_len);
-        } else {
-            self.app.tracer.string_mod.init_complex = None;
-        }
-        let mode = &mut self.app.tracer.string_mod.mode;
+        let string_mod = &mut self.app.tracer.string_mod;
+        Gui::string_mod_init_curve(string_mod, ui);
+        ui.add(DragValue::u64(&mut string_mod.turns).speed(0.3));
+        let mode = &mut string_mod.mode;
         ui.radio_value(mode, StringModMode::Add, "Mode: Add");
         ui.radio_value(mode, StringModMode::Mul, "Mode: Mul");
         ui.radio_value(mode, StringModMode::Pow, "Mode: Pow");
+        ui.radio_value(mode, StringModMode::Base, "Mode: Base");
         ui.label("modulo");
         ui.add(
-            DragValue::u64(&mut self.app.tracer.string_mod.modulo)
+            DragValue::u64(&mut string_mod.modulo)
                 .speed(0.3)
                 .clamp_range(0.0..=50000.),
         );
         ui.label("num");
-        ui.add(DragValue::u64(&mut self.app.tracer.string_mod.num).speed(0.3));
+        ui.add(DragValue::u64(&mut string_mod.num).speed(0.3));
         self.edit_string_mod_color(ui);
     }
 
@@ -467,6 +441,77 @@ impl Gui {
             .tracer
             .grid
             .set_dist(grid_size, &self.app.get_canvas_bounds());
+    }
+
+    pub fn string_mod_init_curve(string_mod: &mut StringMod, ui: &mut Ui) {
+        ui.radio_value(&mut string_mod.init_curve, Curve::Circle, "Circle");
+        ui.radio_value(
+            &mut string_mod.init_curve,
+            Curve::ComplexExp {
+                c: Complex::new(0., 1.),
+            },
+            "Complex",
+        );
+        ui.radio_value(
+            &mut string_mod.init_curve,
+            Curve::Hypotrochoid { r: 1, s: 1, d: 1 },
+            "Hypotrochoid",
+        );
+        ui.radio_value(
+            &mut string_mod.init_curve,
+            Curve::Lissajous {
+                a: 1,
+                b: 1,
+                delta: 0.,
+            },
+            "Lissajous",
+        );
+        match string_mod.init_curve {
+            Curve::Circle => {}
+            Curve::ComplexExp { ref mut c } => {
+                let (re, im);
+                re = c.re;
+                im = c.im;
+                let mut angle = (im / re).atan();
+                let mut init_len = V2::new(re, im).norm();
+                let mut nth_turn = (std::f64::consts::TAU / angle).round() as u64;
+                ui.add(
+                    Slider::f64(&mut init_len, 0.9997..=1.0002)
+                        .text("Init length")
+                        .clamp_to_range(true),
+                );
+                ui.label("1/nth turn; n:");
+                ui.add(DragValue::u64(&mut nth_turn).clamp_range(4.0..=1000000.0));
+                angle = std::f64::consts::TAU / (nth_turn as f64);
+                let (im, re) = angle.sin_cos();
+                c.re = re * init_len;
+                c.im = im * init_len;
+            }
+            Curve::Hypotrochoid {
+                ref mut r,
+                ref mut s,
+                ref mut d,
+            } => {
+                ui.label("r:");
+                ui.add(DragValue::u64(r).clamp_range(1.0..=50000.0));
+                ui.label("R:");
+                ui.add(DragValue::u64(s).clamp_range((*r as f32)..=50000.0));
+                ui.label("d:");
+                ui.add(DragValue::u64(d).clamp_range(1.0..=50000.0));
+            }
+            Curve::Lissajous {
+                ref mut a,
+                ref mut b,
+                ref mut delta,
+            } => {
+                ui.label("a:");
+                ui.add(DragValue::u64(a).clamp_range(1.0..=50000.0));
+                ui.label("b:");
+                ui.add(DragValue::u64(b).clamp_range(1.0..=50000.0));
+                ui.label("delta:");
+                ui.add(DragValue::f64(delta).clamp_range(1.0..=std::f32::consts::PI));
+            }
+        }
     }
 
     pub fn update(

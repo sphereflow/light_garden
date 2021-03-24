@@ -9,7 +9,7 @@ pub use object::*;
 pub use tracer::*;
 pub use string_mod::*;
 use rayon::prelude::*;
-use std::{collections::VecDeque, f64::consts::FRAC_PI_4};
+use std::{collections::VecDeque, f64::consts::*};
 
 pub mod grid;
 pub mod light;
