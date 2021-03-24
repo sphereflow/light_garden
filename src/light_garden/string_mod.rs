@@ -9,6 +9,8 @@ pub struct StringMod {
     pub turns: u64,
     pub init_curve: Curve,
     pub mode: StringModMode,
+    pub modulo_colors: Vec<(Color, u64)>,
+    pub modulo_color_index: usize,
 }
 
 impl StringMod {
@@ -22,6 +24,8 @@ impl StringMod {
             turns: 1,
             init_curve: Curve::Circle,
             mode: StringModMode::Mul,
+            modulo_colors: Vec::new(),
+            modulo_color_index: 0,
         }
     }
 
@@ -49,8 +53,8 @@ impl StringMod {
                 points
             }
             Curve::Hypotrochoid { r, s, d } => {
-                let points: Vec<P2> = (0..m).map(|n|
-                    {
+                let points: Vec<P2> = (0..m)
+                    .map(|n| {
                         let angle =
                             (self.turns * n) as Float * std::f64::consts::TAU / (m as Float);
                         let r = r as f64;
@@ -61,17 +65,19 @@ impl StringMod {
                         let x = smr * angle.cos() + d * (angle * smr / r).cos();
                         let y = smr * angle.sin() - d * (angle * smr / r).sin();
                         P2::new(x, y) / ratio
-                    }
-                    ).collect();
+                    })
+                    .collect();
                 points
             }
             Curve::Lissajous { a, b, delta } => {
-                let points: Vec<P2> = (0..m).map(|n| {
-                    let angle = (self.turns * n) as Float * TAU / (m as Float);
-                    let x = (a as f64 * angle + delta).sin();
-                    let y = (b as f64 * angle).sin();
-                    P2::new(x, y)
-                }).collect();
+                let points: Vec<P2> = (0..m)
+                    .map(|n| {
+                        let angle = (self.turns * n) as Float * TAU / (m as Float);
+                        let x = (a as f64 * angle + delta).sin();
+                        let y = (b as f64 * angle).sin();
+                        P2::new(x, y)
+                    })
+                    .collect();
                 points
             }
         }
@@ -89,7 +95,26 @@ impl StringMod {
                 StringModMode::Base => (self.num.pow(iix as u32) % m) as usize,
             };
             res.push((points[iix as usize], self.color));
-            res.push((points[ix], self.color));
+            let mut color = [0.; 4];
+            let mut num_colors = 0;
+            for (c, modulo) in &self.modulo_colors {
+                if (ix as u64 % modulo) == 0 {
+                    color[0] += c[0];
+                    color[1] += c[1];
+                    color[2] += c[2];
+                    color[3] += c[3];
+                    num_colors += 1;
+                }
+            }
+            if num_colors == 0 {
+                res.push((points[ix], self.color));
+            } else {
+                color[0] /= num_colors as f32;
+                color[1] /= num_colors as f32;
+                color[2] /= num_colors as f32;
+                color[3] /= num_colors as f32;
+                res.push((points[ix], color));
+            }
         }
         res
     }
@@ -108,5 +133,5 @@ pub enum Curve {
     Circle,
     ComplexExp { c: na::Complex<f64> },
     Hypotrochoid { r: u64, s: u64, d: u64 },
-    Lissajous {a: u64, b: u64, delta: f64 },
+    Lissajous { a: u64, b: u64, delta: f64 },
 }

@@ -257,6 +257,7 @@ impl Gui {
         ui.label("num");
         ui.add(DragValue::u64(&mut string_mod.num).speed(0.3));
         self.edit_string_mod_color(ui);
+        Gui::string_mod_modulo_colors(&mut self.app.tracer.string_mod, ui);
     }
 
     fn edit_light(light: &mut Light, ui: &mut Ui) {
@@ -494,6 +495,9 @@ impl Gui {
             } => {
                 ui.label("r:");
                 ui.add(DragValue::u64(r).clamp_range(1.0..=50000.0));
+                if s < r {
+                    *s = *r;
+                }
                 ui.label("R:");
                 ui.add(DragValue::u64(s).clamp_range((*r as f32)..=50000.0));
                 ui.label("d:");
@@ -512,6 +516,31 @@ impl Gui {
                 ui.add(DragValue::f64(delta).clamp_range(1.0..=std::f32::consts::PI));
             }
         }
+    }
+
+    pub fn string_mod_modulo_colors(string_mod: &mut StringMod, ui: &mut Ui) {
+        if ui.button("Add Color").clicked() {
+            string_mod.modulo_colors.push(([1.; 4], 2));
+        }
+        if string_mod.modulo_colors.is_empty() {
+            return;
+        }
+        ui.label("modulo-color index:");
+        ui.add(
+            DragValue::usize(&mut string_mod.modulo_color_index)
+                .clamp_range(0.0..=(string_mod.modulo_colors.len() as f32 - 0.9)),
+        );
+        let (c, ref mut modulo) = string_mod.modulo_colors[string_mod.modulo_color_index];
+        let mut color = Color32::from(Rgba::from_rgba_premultiplied(c[0], c[1], c[2], c[3]));
+        egui::widgets::color_picker::color_edit_button_srgba(
+            ui,
+            &mut color,
+            color_picker::Alpha::OnlyBlend,
+        );
+        ui.add(DragValue::u64(modulo).clamp_range(1.0..=50000.0));
+        let rgba = Rgba::from(color);
+        string_mod.modulo_colors[string_mod.modulo_color_index].0 =
+            [rgba[0], rgba[1], rgba[2], rgba[3]];
     }
 
     pub fn update(
