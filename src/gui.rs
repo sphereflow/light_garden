@@ -520,17 +520,24 @@ impl Gui {
 
     pub fn string_mod_modulo_colors(string_mod: &mut StringMod, ui: &mut Ui) {
         if ui.button("Add Color").clicked() {
-            string_mod.modulo_colors.push(([1.; 4], 2));
+            string_mod.modulo_colors.push(ModRemColor {
+                modulo: 2,
+                rem: 0,
+                color: [1.; 4],
+            });
         }
         if string_mod.modulo_colors.is_empty() {
             return;
         }
-        ui.label("modulo-color index:");
         ui.add(
             DragValue::usize(&mut string_mod.modulo_color_index)
                 .clamp_range(0.0..=(string_mod.modulo_colors.len() as f32 - 0.9)),
         );
-        let (c, ref mut modulo) = string_mod.modulo_colors[string_mod.modulo_color_index];
+        let ModRemColor {
+            color: c,
+            ref mut modulo,
+            ref mut rem,
+        } = string_mod.modulo_colors[string_mod.modulo_color_index];
         let mut color = Color32::from(Rgba::from_rgba_premultiplied(c[0], c[1], c[2], c[3]));
         egui::widgets::color_picker::color_edit_button_srgba(
             ui,
@@ -538,8 +545,9 @@ impl Gui {
             color_picker::Alpha::OnlyBlend,
         );
         ui.add(DragValue::u64(modulo).clamp_range(1.0..=50000.0));
+        ui.add(DragValue::u64(rem).clamp_range(0.0..=*modulo as f32 - 0.9));
         let rgba = Rgba::from(color);
-        string_mod.modulo_colors[string_mod.modulo_color_index].0 =
+        string_mod.modulo_colors[string_mod.modulo_color_index].color =
             [rgba[0], rgba[1], rgba[2], rgba[3]];
     }
 

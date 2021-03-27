@@ -9,7 +9,7 @@ pub struct StringMod {
     pub turns: u64,
     pub init_curve: Curve,
     pub mode: StringModMode,
-    pub modulo_colors: Vec<(Color, u64)>,
+    pub modulo_colors: Vec<ModRemColor>,
     pub modulo_color_index: usize,
 }
 
@@ -97,8 +97,13 @@ impl StringMod {
             res.push((points[iix as usize], self.color));
             let mut color = [0.; 4];
             let mut num_colors = 0;
-            for (c, modulo) in &self.modulo_colors {
-                if (ix as u64 % modulo) == 0 {
+            for ModRemColor {
+                modulo,
+                rem,
+                color: c,
+            } in &self.modulo_colors
+            {
+                if (ix as u64 % modulo) == *rem {
                     color[0] += c[0];
                     color[1] += c[1];
                     color[2] += c[2];
@@ -118,6 +123,12 @@ impl StringMod {
         }
         res
     }
+}
+
+pub struct ModRemColor {
+    pub modulo: u64,
+    pub rem: u64,
+    pub color: Color,
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
