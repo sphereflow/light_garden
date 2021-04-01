@@ -6,16 +6,16 @@ use instant::Instant;
 pub use light::*;
 use na::{distance, Point2};
 pub use object::*;
-pub use tracer::*;
-pub use string_mod::*;
 use rayon::prelude::*;
 use std::{collections::VecDeque, f64::consts::*};
+pub use string_mod::*;
+pub use tracer::*;
 
 pub mod grid;
 pub mod light;
 pub mod object;
-pub mod tracer;
 pub mod string_mod;
+pub mod tracer;
 
 pub struct LightGarden {
     pub tracer: Tracer,
@@ -29,6 +29,8 @@ pub struct LightGarden {
     pub ray_width: f64,
     pub mode: Mode,
     render_to_texture: bool,
+    pub string_mods: Vec<StringMod>,
+    pub string_mod_ix: usize,
 }
 
 impl LightGarden {
@@ -59,6 +61,8 @@ impl LightGarden {
             render_to_texture: true,
             ray_width: 1.0,
             mode: Mode::NoMode,
+            string_mods: vec![StringMod::new()],
+            string_mod_ix: 0,
         }
     }
 
@@ -224,7 +228,9 @@ impl LightGarden {
                             };
                             self.tracer.objects[current_ix.min(click_ix)] = Object::new_geo(
                                 geo,
-                                self.tracer.objects[current_ix].get_material().refractive_index,
+                                self.tracer.objects[current_ix]
+                                    .get_material()
+                                    .refractive_index,
                             );
                             // current_ix != click_ix
                             self.tracer.objects.remove(current_ix.max(click_ix));
@@ -283,7 +289,8 @@ impl LightGarden {
             }
 
             Mode::DrawDirectionalLightEnd { start } => {
-                self.tracer.lights
+                self.tracer
+                    .lights
                     .push(Light::DirectionalLight(DirectionalLight::new(
                         self.selected_color,
                         self.num_rays,
@@ -300,7 +307,9 @@ impl LightGarden {
             }
 
             Mode::DrawMirrorEnd { start } => {
-                self.tracer.objects.push(Object::new_mirror(start, self.mouse_pos));
+                self.tracer
+                    .objects
+                    .push(Object::new_mirror(start, self.mouse_pos));
                 self.tracer.drawing_object = None;
                 self.mode = Mode::NoMode;
             }
@@ -340,6 +349,8 @@ impl LightGarden {
                 self.tracer.drawing_object = None;
                 self.mode = Mode::NoMode;
             }
+
+            Mode::StringMod=> {}
         }
     }
 
@@ -429,6 +440,18 @@ impl LightGarden {
             self.recreate_pipeline = true;
         }
     }
+
+    pub fn draw(&mut self) -> Vec<(P2, Color)> {
+        if self.mode == Mode::StringMod {
+            let mut res = Vec::new();
+            for s in &self.string_mods {
+                res.append(&mut s.draw(s.init_points()));
+            }
+            return res;
+        } else {
+            self.tracer.trace_all()
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]
@@ -449,4 +472,5 @@ pub enum Mode {
     DrawSpotLightEnd { origin: P2 },
     DrawDirectionalLightStart,
     DrawDirectionalLightEnd { start: P2 },
+    StringMod,
 }

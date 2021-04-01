@@ -373,7 +373,7 @@ impl Renderer {
         queue: &Queue,
         gui: &mut Gui,
     ) {
-        let vb = gui.app.tracer.trace_all();
+        let vb = gui.app.draw();
         // self.update_vertex_buffer_with_line_strips(device, &vb);
         self.update_vertex_buffer(device, &vb);
 

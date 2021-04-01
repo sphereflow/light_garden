@@ -12,9 +12,6 @@ pub struct Tracer {
     pub grid: Grid,
     pub canvas_bounds: Rect,
     pub trace_time_vd: VecDeque<f64>,
-    pub string_mods: Vec<StringMod>,
-    pub string_mod_on: bool,
-    pub string_mod_ix: usize,
 }
 
 impl Tracer {
@@ -39,9 +36,6 @@ impl Tracer {
             grid: Grid::new(&canvas_bounds),
             canvas_bounds: *canvas_bounds,
             trace_time_vd: VecDeque::new(),
-            string_mods: vec![StringMod::new()],
-            string_mod_on: false,
-            string_mod_ix: 0,
         }
     }
 
@@ -111,13 +105,6 @@ impl Tracer {
     }
 
     pub fn trace_all(&mut self) -> Vec<(P2, Color)> {
-        if self.string_mod_on {
-            let mut res = Vec::new();
-            for s in &self.string_mods {
-                res.append(&mut s.draw(s.init_points()));
-            }
-            return res;
-        }
         let instant_start = Instant::now();
         if let Some(dro) = self.drawing_object.as_ref() {
             self.objects.push(dro.clone());

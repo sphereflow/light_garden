@@ -48,7 +48,10 @@ impl Gui {
         let elapsed = self.last_update_inst.elapsed();
         self.platform.begin_frame();
         let ctx = self.platform.context();
-        if self.app.mode == Mode::NoMode || self.app.mode == Mode::Selected {
+        if self.app.mode == Mode::NoMode
+            || self.app.mode == Mode::Selected
+            || self.app.mode == Mode::StringMod
+        {
             let window = egui::Window::new("Light Garden");
             window
                 .default_size(Vec2::new(300.0, 100.0))
@@ -61,7 +64,7 @@ impl Gui {
                         ));
                     }
 
-                    if self.app.tracer.string_mod_on {
+                    if self.app.mode == Mode::StringMod {
                         self.ui_mode = UiMode::StringMod;
                     }
 
@@ -115,7 +118,7 @@ impl Gui {
         }
         if ui.button("St(r)ing mod").clicked() {
             self.ui_mode = UiMode::StringMod;
-            self.app.tracer.string_mod_on = true;
+            self.app.mode = Mode::StringMod;
         }
         if ui.button("(Q)it").clicked() {
             self.ui_mode = UiMode::Exiting;
@@ -258,14 +261,11 @@ impl Gui {
         ui.label("num");
         ui.add(DragValue::u64(&mut string_mod.num).speed(0.3));
         self.edit_string_mod_color(ui);
-        Gui::string_mod_modulo_colors(
-            &mut self.app.tracer.string_mods[self.app.tracer.string_mod_ix],
-            ui,
-        );
+        Gui::string_mod_modulo_colors(&mut self.app.string_mods[self.app.string_mod_ix], ui);
     }
 
     fn get_current_string_mod(&mut self) -> &mut StringMod {
-        &mut self.app.tracer.string_mods[self.app.tracer.string_mod_ix]
+        &mut self.app.string_mods[self.app.string_mod_ix]
     }
 
     fn edit_light(light: &mut Light, ui: &mut Ui) {
@@ -561,21 +561,18 @@ impl Gui {
 
     pub fn string_mod_selector(&mut self, ui: &mut Ui) {
         ui.add(
-            DragValue::usize(&mut self.app.tracer.string_mod_ix)
-                .clamp_range(0.0..=self.app.tracer.string_mods.len() as f32 - 0.9),
+            DragValue::usize(&mut self.app.string_mod_ix)
+                .clamp_range(0.0..=self.app.string_mods.len() as f32 - 0.9),
         );
         if ui.button("Add StringMod").clicked() {
             let new = self.get_current_string_mod().clone();
-            self.app.tracer.string_mods.push(new);
+            self.app.string_mods.push(new);
         }
-        if self.app.tracer.string_mods.len() > 1 {
+        if self.app.string_mods.len() > 1 {
             if ui.button("Delete current StringMod").clicked() {
-                self.app
-                    .tracer
-                    .string_mods
-                    .remove(self.app.tracer.string_mod_ix);
-                if self.app.tracer.string_mod_ix >= self.app.tracer.string_mods.len() {
-                    self.app.tracer.string_mod_ix -= 1;
+                self.app.string_mods.remove(self.app.string_mod_ix);
+                if self.app.string_mod_ix >= self.app.string_mods.len() {
+                    self.app.string_mod_ix -= 1;
                 }
             }
         }
@@ -603,7 +600,7 @@ impl Gui {
                             UiMode::Settings => self.ui_mode = UiMode::Main,
                             UiMode::Grid => self.ui_mode = UiMode::Main,
                             UiMode::StringMod => {
-                                self.app.tracer.string_mod_on = false;
+                                self.app.mode = Mode::NoMode;
                                 self.ui_mode = UiMode::Main;
                             }
                             UiMode::Exiting => {}
@@ -615,7 +612,7 @@ impl Gui {
                         }
                         (Some(Key::E), UiMode::Main) => self.ui_mode = UiMode::Settings,
                         (Some(Key::R), UiMode::Main) => {
-                            self.app.tracer.string_mod_on = true;
+                            self.app.mode = Mode::StringMod;
                             self.ui_mode = UiMode::StringMod;
                         }
 
