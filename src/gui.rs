@@ -61,7 +61,7 @@ impl Gui {
                         ));
                     }
 
-                    if self.app.tracer.string_mod.on {
+                    if self.app.tracer.string_mod_on {
                         self.ui_mode = UiMode::StringMod;
                     }
 
@@ -115,7 +115,7 @@ impl Gui {
         }
         if ui.button("St(r)ing mod").clicked() {
             self.ui_mode = UiMode::StringMod;
-            self.app.tracer.string_mod.on = true;
+            self.app.tracer.string_mod_on = true;
         }
         if ui.button("(Q)it").clicked() {
             self.ui_mode = UiMode::Exiting;
@@ -240,7 +240,8 @@ impl Gui {
     }
 
     fn string_mod(&mut self, ui: &mut Ui) {
-        let string_mod = &mut self.app.tracer.string_mod;
+        self.string_mod_selector(ui);
+        let string_mod = self.get_current_string_mod();
         Gui::string_mod_init_curve(string_mod, ui);
         ui.add(DragValue::u64(&mut string_mod.turns).speed(0.3));
         let mode = &mut string_mod.mode;
@@ -257,7 +258,14 @@ impl Gui {
         ui.label("num");
         ui.add(DragValue::u64(&mut string_mod.num).speed(0.3));
         self.edit_string_mod_color(ui);
-        Gui::string_mod_modulo_colors(&mut self.app.tracer.string_mod, ui);
+        Gui::string_mod_modulo_colors(
+            &mut self.app.tracer.string_mods[self.app.tracer.string_mod_ix],
+            ui,
+        );
+    }
+
+    fn get_current_string_mod(&mut self) -> &mut StringMod {
+        &mut self.app.tracer.string_mods[self.app.tracer.string_mod_ix]
     }
 
     fn edit_light(light: &mut Light, ui: &mut Ui) {
@@ -313,7 +321,7 @@ impl Gui {
     }
 
     fn edit_string_mod_color(&mut self, ui: &mut Ui) {
-        let c = self.app.tracer.string_mod.color;
+        let c = self.get_current_string_mod().color;
         let mut color = Color32::from(Rgba::from_rgba_premultiplied(c[0], c[1], c[2], c[3]));
         egui::widgets::color_picker::color_edit_button_srgba(
             ui,
@@ -321,7 +329,7 @@ impl Gui {
             color_picker::Alpha::OnlyBlend,
         );
         let rgba = Rgba::from(color);
-        self.app.tracer.string_mod.color = [rgba[0], rgba[1], rgba[2], rgba[3]];
+        self.get_current_string_mod().color = [rgba[0], rgba[1], rgba[2], rgba[3]];
     }
 
     fn edit_object(object: &mut Object, ui: &mut Ui) {
@@ -551,6 +559,28 @@ impl Gui {
             [rgba[0], rgba[1], rgba[2], rgba[3]];
     }
 
+    pub fn string_mod_selector(&mut self, ui: &mut Ui) {
+        ui.add(
+            DragValue::usize(&mut self.app.tracer.string_mod_ix)
+                .clamp_range(0.0..=self.app.tracer.string_mods.len() as f32 - 0.9),
+        );
+        if ui.button("Add StringMod").clicked() {
+            let new = self.get_current_string_mod().clone();
+            self.app.tracer.string_mods.push(new);
+        }
+        if self.app.tracer.string_mods.len() > 1 {
+            if ui.button("Delete current StringMod").clicked() {
+                self.app
+                    .tracer
+                    .string_mods
+                    .remove(self.app.tracer.string_mod_ix);
+                if self.app.tracer.string_mod_ix >= self.app.tracer.string_mods.len() {
+                    self.app.tracer.string_mod_ix -= 1;
+                }
+            }
+        }
+    }
+
     pub fn update(
         &mut self,
         event: &winit::event::WindowEvent,
@@ -573,7 +603,7 @@ impl Gui {
                             UiMode::Settings => self.ui_mode = UiMode::Main,
                             UiMode::Grid => self.ui_mode = UiMode::Main,
                             UiMode::StringMod => {
-                                self.app.tracer.string_mod.on = false;
+                                self.app.tracer.string_mod_on = false;
                                 self.ui_mode = UiMode::Main;
                             }
                             UiMode::Exiting => {}
@@ -585,7 +615,7 @@ impl Gui {
                         }
                         (Some(Key::E), UiMode::Main) => self.ui_mode = UiMode::Settings,
                         (Some(Key::R), UiMode::Main) => {
-                            self.app.tracer.string_mod.on = true;
+                            self.app.tracer.string_mod_on = true;
                             self.ui_mode = UiMode::StringMod;
                         }
 

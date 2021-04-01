@@ -1,7 +1,7 @@
 use crate::light_garden::*;
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct StringMod {
-    pub on: bool,
     pub modulo: u64,
     pub num: u64,
     pub pow: u32,
@@ -16,7 +16,6 @@ pub struct StringMod {
 impl StringMod {
     pub fn new() -> Self {
         StringMod {
-            on: false,
             modulo: 5,
             num: 1,
             pow: 0,
@@ -125,6 +124,7 @@ impl StringMod {
     }
 }
 
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub struct ModRemColor {
     pub modulo: u64,
     pub rem: u64,
