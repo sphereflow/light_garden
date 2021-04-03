@@ -84,7 +84,10 @@ impl Gui {
                         UiMode::Grid => {
                             self.grid(ui);
                         }
-                        UiMode::StringMod => self.string_mod(ui),
+                        UiMode::StringMod => {
+                            self.string_mod_selector(ui);
+                            Gui::string_mod(ui, self.get_current_string_mod());
+                        }
                         UiMode::Exiting => {}
                     }
 
@@ -242,10 +245,22 @@ impl Gui {
         self.edit_grid_color(ui);
     }
 
-    fn string_mod(&mut self, ui: &mut Ui) {
-        self.string_mod_selector(ui);
-        let string_mod = self.get_current_string_mod();
+    fn string_mod(ui: &mut Ui, string_mod: &mut StringMod) {
+        let bnest = string_mod.nested.is_some();
+        let mut bcbnest = bnest;
+        ui.add(Checkbox::new(&mut bcbnest, "Nested"));
+        if bcbnest != bnest {
+            string_mod.nested = match bcbnest {
+                true => Some(Box::new(StringMod::new())),
+                false => None,
+            }
+        }
         Gui::string_mod_init_curve(string_mod, ui);
+        if let Some(nested) = string_mod.nested.as_deref_mut() {
+            Window::new("Nested StringMod").show(ui.ctx(), |nested_ui| {
+                Gui::string_mod(nested_ui, nested);
+            });
+        }
         ui.add(DragValue::u64(&mut string_mod.turns).speed(0.3));
         let mode = &mut string_mod.mode;
         ui.radio_value(mode, StringModMode::Add, "Mode: Add");
@@ -260,8 +275,8 @@ impl Gui {
         );
         ui.label("num");
         ui.add(DragValue::u64(&mut string_mod.num).speed(0.3));
-        self.edit_string_mod_color(ui);
-        Gui::string_mod_modulo_colors(&mut self.app.string_mods[self.app.string_mod_ix], ui);
+        Gui::edit_string_mod_color(string_mod, ui);
+        Gui::string_mod_modulo_colors(string_mod, ui);
     }
 
     fn get_current_string_mod(&mut self) -> &mut StringMod {
@@ -320,8 +335,8 @@ impl Gui {
             .set_color([rgba[0], rgba[1], rgba[2], rgba[3]]);
     }
 
-    fn edit_string_mod_color(&mut self, ui: &mut Ui) {
-        let c = self.get_current_string_mod().color;
+    fn edit_string_mod_color(string_mod: &mut StringMod, ui: &mut Ui) {
+        let c = string_mod.color;
         let mut color = Color32::from(Rgba::from_rgba_premultiplied(c[0], c[1], c[2], c[3]));
         egui::widgets::color_picker::color_edit_button_srgba(
             ui,
@@ -329,7 +344,7 @@ impl Gui {
             color_picker::Alpha::OnlyBlend,
         );
         let rgba = Rgba::from(color);
-        self.get_current_string_mod().color = [rgba[0], rgba[1], rgba[2], rgba[3]];
+        string_mod.color = [rgba[0], rgba[1], rgba[2], rgba[3]];
     }
 
     fn edit_object(object: &mut Object, ui: &mut Ui) {

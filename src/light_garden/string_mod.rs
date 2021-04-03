@@ -11,6 +11,7 @@ pub struct StringMod {
     pub mode: StringModMode,
     pub modulo_colors: Vec<ModRemColor>,
     pub modulo_color_index: usize,
+    pub nested: Option<Box<StringMod>>,
 }
 
 impl StringMod {
@@ -25,6 +26,7 @@ impl StringMod {
             mode: StringModMode::Mul,
             modulo_colors: Vec::new(),
             modulo_color_index: 0,
+            nested: None,
         }
     }
 
@@ -82,45 +84,77 @@ impl StringMod {
         }
     }
 
-    pub fn draw(&self, points: Vec<P2>) -> Vec<(P2, Color)> {
+    pub fn line_crossings_as_points(&self) -> Vec<P2> {
+        let draw_points = self.draw_init_points(self.init_points());
         let mut res = Vec::new();
+        let mut lines = Vec::new();
+        for w in draw_points.chunks_exact(2) {
+            lines.push(LineSegment::from_ab(w[0].0, w[1].0));
+        }
+        for diff in 1..lines.len() {
+            for ixa in 0..lines.len() {
+                if let Some(p) = lines[ixa].intersect(&lines[(ixa + diff) % lines.len()]) {
+                    res.push(p);
+                }
+            }
+        }
+        res
+    }
+
+    pub fn draw_init_points(&self, points: Vec<P2>) -> Vec<(P2, Color)> {
+        let mut res = Vec::new();
+        if points.is_empty() {
+            return res;
+        }
         let m = self.modulo;
         // we start at the index: 0
-        for iix in 1..self.modulo {
+        for iix in 0..self.modulo {
             let ix = match self.mode {
                 StringModMode::Add => ((iix + self.num) % m) as usize,
                 StringModMode::Mul => ((iix * self.num) % m) as usize,
                 StringModMode::Pow => (iix.pow(self.num as u32) % m) as usize,
                 StringModMode::Base => (self.num.pow(iix as u32) % m) as usize,
             };
-            res.push((points[iix as usize], self.color));
-            let mut color = [0.; 4];
-            let mut num_colors = 0;
-            for ModRemColor {
-                modulo,
-                rem,
-                color: c,
-            } in &self.modulo_colors
-            {
-                if (ix as u64 % modulo) == *rem {
-                    color[0] += c[0];
-                    color[1] += c[1];
-                    color[2] += c[2];
-                    color[3] += c[3];
-                    num_colors += 1;
-                }
-            }
-            if num_colors == 0 {
-                res.push((points[ix], self.color));
-            } else {
-                color[0] /= num_colors as f32;
-                color[1] /= num_colors as f32;
-                color[2] /= num_colors as f32;
-                color[3] /= num_colors as f32;
-                res.push((points[ix], color));
-            }
+            res.push((points[iix as usize % points.len()], self.get_color(iix)));
+            res.push((points[ix % points.len()], self.get_color(ix as u64)));
         }
         res
+    }
+
+    fn get_color(&self, ix: u64) -> Color {
+        let mut color = [0.; 4];
+        let mut num_colors = 0;
+        for ModRemColor {
+            modulo,
+            rem,
+            color: c,
+        } in &self.modulo_colors
+        {
+            if (ix % modulo) == *rem {
+                color[0] += c[0];
+                color[1] += c[1];
+                color[2] += c[2];
+                color[3] += c[3];
+                num_colors += 1;
+            }
+        }
+        if num_colors == 0 {
+            self.color
+        } else {
+            color[0] /= num_colors as f32;
+            color[1] /= num_colors as f32;
+            color[2] /= num_colors as f32;
+            color[3] /= num_colors as f32;
+            color
+        }
+    }
+
+    pub fn draw(&self) -> Vec<(P2, Color)> {
+        if let Some(string_mod) = self.nested.as_ref() {
+            string_mod.draw_init_points(self.line_crossings_as_points())
+        } else {
+            self.draw_init_points(self.init_points())
+        }
     }
 }
 

@@ -445,7 +445,7 @@ impl LightGarden {
         if self.mode == Mode::StringMod {
             let mut res = Vec::new();
             for s in &self.string_mods {
-                res.append(&mut s.draw(s.init_points()));
+                res.append(&mut s.draw());
             }
             return res;
         } else {
