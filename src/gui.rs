@@ -17,42 +17,18 @@ pub struct Gui {
     pub ui_mode: UiMode,
 }
 
-impl Gui {
-    pub fn new(winit_window: &winit::window::Window, sc_desc: &wgpu::SwapChainDescriptor) -> Self {
-        let size = winit_window.inner_size();
-        let platform = Platform::new(PlatformDescriptor {
-            physical_width: size.width,
-            physical_height: size.height,
-            scale_factor: winit_window.scale_factor(),
-            font_definitions: FontDefinitions::default(),
-            style: Default::default(),
-        });
-        let last_update_inst = Instant::now();
-        let app = LightGarden::new(
-            collision2d::geo::Rect::from_tlbr(1., -1., -1., 1.),
-            sc_desc.format,
-        );
-
-        Gui {
-            platform,
-            scale_factor: winit_window.scale_factor() as f32,
-            last_update_inst,
-            last_cursor: None,
-            app,
-            ui_mode: UiMode::new(),
-        }
+impl App for Gui {
+    fn name(&self) -> &str {
+        "Light Garden"
     }
 
-    pub fn gui(&mut self) -> Vec<egui::ClippedMesh> {
-        use egui::*;
+    fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
         let elapsed = self.last_update_inst.elapsed();
-        self.platform.begin_frame();
-        let ctx = self.platform.context();
         if self.app.mode == Mode::NoMode
             || self.app.mode == Mode::Selected
             || self.app.mode == Mode::StringMod
         {
-            let window = egui::Window::new("Light Garden");
+            let window = Window::new("Light Garden");
             window
                 .default_size(Vec2::new(300.0, 100.0))
                 .show(&ctx, |ui| {
@@ -100,10 +76,36 @@ impl Gui {
         }
 
         self.last_update_inst = Instant::now();
-
-        let (_output, paint_commands) = self.platform.end_frame();
-        ctx.tessellate(paint_commands)
     }
+}
+
+impl Gui {
+    pub fn new(winit_window: &winit::window::Window, sc_desc: &wgpu::SwapChainDescriptor) -> Self {
+        let size = winit_window.inner_size();
+        let platform = Platform::new(PlatformDescriptor {
+            physical_width: size.width,
+            physical_height: size.height,
+            scale_factor: winit_window.scale_factor(),
+            font_definitions: FontDefinitions::default(),
+            style: Default::default(),
+        });
+        let last_update_inst = Instant::now();
+        let app = LightGarden::new(
+            collision2d::geo::Rect::from_tlbr(1., -1., -1., 1.),
+            sc_desc.format,
+        );
+
+        Gui {
+            platform,
+            scale_factor: winit_window.scale_factor() as f32,
+            last_update_inst,
+            last_cursor: None,
+            app,
+            ui_mode: UiMode::new(),
+        }
+    }
+
+    pub fn gui(&mut self) {}
 
     fn main(&mut self, ui: &mut Ui) {
         if ui.button("(A)dd ...").clicked() {
@@ -227,7 +229,7 @@ impl Gui {
 
     fn settings(&mut self, ui: &mut Ui) {
         let mut chunk_size = self.app.tracer.chunk_size as u32;
-        ui.add(Slider::u32(&mut chunk_size, 1..=1000).text("Rayon Chunk Size"));
+        ui.add(Slider::new::<u32>(&mut chunk_size, 1..=1000).text("Rayon Chunk Size"));
         self.app.tracer.chunk_size = chunk_size as usize;
 
         self.edit_blend(ui);
@@ -261,7 +263,7 @@ impl Gui {
                 Gui::string_mod(nested_ui, nested);
             });
         }
-        ui.add(DragValue::u64(&mut string_mod.turns).speed(0.3));
+        ui.add(DragValue::new::<u64>(&mut string_mod.turns).speed(0.3));
         let mode = &mut string_mod.mode;
         ui.radio_value(mode, StringModMode::Add, "Mode: Add");
         ui.radio_value(mode, StringModMode::Mul, "Mode: Mul");
@@ -269,12 +271,12 @@ impl Gui {
         ui.radio_value(mode, StringModMode::Base, "Mode: Base");
         ui.label("modulo");
         ui.add(
-            DragValue::u64(&mut string_mod.modulo)
+            DragValue::new::<u64>(&mut string_mod.modulo)
                 .speed(0.3)
                 .clamp_range(0.0..=50000.),
         );
         ui.label("num");
-        ui.add(DragValue::u64(&mut string_mod.num).speed(0.3));
+        ui.add(DragValue::new::<u64>(&mut string_mod.num).speed(0.3));
         Gui::edit_string_mod_color(string_mod, ui);
         Gui::string_mod_modulo_colors(string_mod, ui);
     }
@@ -291,7 +293,7 @@ impl Gui {
                 // spot angle
                 let mut spot_angle = spot.spot_angle * 180. / PI;
                 let old_spot_angle = spot_angle;
-                ui.add(Slider::f64(&mut spot_angle, 0.0..=360.0).text("Spot Angle"));
+                ui.add(Slider::new::<f64>(&mut spot_angle, 0.0..=360.0).text("Spot Angle"));
                 if spot_angle != old_spot_angle {
                     spot.spot_angle = spot_angle * PI / 180.;
                     update_light = true;
@@ -303,7 +305,7 @@ impl Gui {
         // num rays
         let mut num_rays_mut = light.get_num_rays();
         let num_rays = num_rays_mut;
-        ui.add(Slider::u32(&mut num_rays_mut, 1..=30000).text("Num Rays"));
+        ui.add(Slider::new::<u32>(&mut num_rays_mut, 1..=30000).text("Num Rays"));
         if num_rays != num_rays_mut || update_light {
             light.set_num_rays(num_rays_mut);
         }
@@ -351,66 +353,77 @@ impl Gui {
         if let Some(material) = object.material_mut() {
             let mut whole: i32 = material.refractive_index.floor() as i32;
             let mut frac: Float = material.refractive_index - whole as Float;
-            ui.add(Slider::i32(&mut whole, -10..=10).text("Refractive Index whole part"));
-            ui.add(Slider::f64(&mut frac, -0.0..=0.999).text("Refractive Index fractional part"));
+            ui.add(Slider::new::<i32>(&mut whole, -10..=10).text("Refractive Index whole part"));
+            ui.add(
+                Slider::new::<f64>(&mut frac, -0.0..=0.999)
+                    .text("Refractive Index fractional part"),
+            );
             material.refractive_index = whole as Float + frac;
         }
     }
 
     fn edit_blend(&mut self, ui: &mut Ui) {
-        ui.add(Slider::u32(&mut self.app.tracer.max_bounce, 1..=12).text("Max Bounce:"));
+        ui.add(Slider::new::<u32>(&mut self.app.tracer.max_bounce, 1..=12).text("Max Bounce:"));
         let blend_factors: &[BlendFactor] = &[
             BlendFactor::Zero,
             BlendFactor::One,
-            BlendFactor::OneMinusSrcColor,
-            BlendFactor::OneMinusSrcAlpha,
-            BlendFactor::OneMinusDstColor,
-            BlendFactor::OneMinusDstAlpha,
-            BlendFactor::DstColor,
-            BlendFactor::DstAlpha,
+            BlendFactor::Src,
+            BlendFactor::OneMinusSrc,
             BlendFactor::SrcAlpha,
-            BlendFactor::SrcColor,
+            BlendFactor::OneMinusSrcAlpha,
+            BlendFactor::Dst,
+            BlendFactor::OneMinusDst,
+            BlendFactor::DstAlpha,
+            BlendFactor::OneMinusDstAlpha,
             BlendFactor::SrcAlphaSaturated,
-            BlendFactor::BlendColor,
-            BlendFactor::OneMinusBlendColor,
+            BlendFactor::Constant,
+            BlendFactor::OneMinusConstant,
         ];
         let mut selected_changed = false;
 
-        let mut selected = self.app.color_state_descriptor.color_blend.src_factor;
-        combo_box_with_label(ui, "ColorSrc", format!("{:?}", selected), |ui| {
-            blend_factors.iter().for_each(|bf| {
-                ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
+            let mut selected = blend_state.color.src_factor;
+            let old_selected = selected.clone();
+            combo_box_with_label(ui, "ColorSrc", format!("{:?}", selected), |ui| {
+                blend_factors.iter().for_each(|bf| {
+                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+                });
             });
-        });
-        selected_changed |= self.app.color_state_descriptor.color_blend.src_factor != selected;
-        self.app.color_state_descriptor.color_blend.src_factor = selected;
+            selected_changed |= old_selected != selected;
+        }
 
-        selected = self.app.color_state_descriptor.color_blend.dst_factor;
-        combo_box_with_label(ui, "ColorDst", format!("{:?}", selected), |ui| {
-            blend_factors.iter().for_each(|bf| {
-                ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
+            let mut selected = blend_state.color.dst_factor;
+            let old_selected = selected.clone();
+            combo_box_with_label(ui, "ColorDst", format!("{:?}", selected), |ui| {
+                blend_factors.iter().for_each(|bf| {
+                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+                });
             });
-        });
-        selected_changed |= self.app.color_state_descriptor.color_blend.dst_factor != selected;
-        self.app.color_state_descriptor.color_blend.dst_factor = selected;
+            selected_changed |= old_selected != selected;
+        }
 
-        selected = self.app.color_state_descriptor.alpha_blend.src_factor;
-        combo_box_with_label(ui, "AlphaSrc", format!("{:?}", selected), |ui| {
-            blend_factors.iter().for_each(|bf| {
-                ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
+            let mut selected = blend_state.alpha.src_factor;
+            let old_selected = selected.clone();
+            combo_box_with_label(ui, "AlphaSrc", format!("{:?}", selected), |ui| {
+                blend_factors.iter().for_each(|bf| {
+                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+                });
             });
-        });
-        selected_changed |= self.app.color_state_descriptor.alpha_blend.src_factor != selected;
-        self.app.color_state_descriptor.alpha_blend.src_factor = selected;
+            selected_changed |= old_selected != selected;
+        }
 
-        selected = self.app.color_state_descriptor.alpha_blend.dst_factor;
-        combo_box_with_label(ui, "AlphaDst", format!("{:?}", selected), |ui| {
-            blend_factors.iter().for_each(|bf| {
-                ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
+            let mut selected = blend_state.alpha.dst_factor;
+            let old_selected = selected.clone();
+            combo_box_with_label(ui, "AlphaDst", format!("{:?}", selected), |ui| {
+                blend_factors.iter().for_each(|bf| {
+                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+                });
             });
-        });
-        selected_changed |= self.app.color_state_descriptor.alpha_blend.dst_factor != selected;
-        self.app.color_state_descriptor.alpha_blend.dst_factor = selected;
+            selected_changed |= old_selected != selected;
+        }
 
         let blend_ops: &[BlendOperation] = &[
             BlendOperation::Min,
@@ -420,23 +433,27 @@ impl Gui {
             BlendOperation::ReverseSubtract,
         ];
 
-        let mut selected = self.app.color_state_descriptor.color_blend.operation;
-        combo_box_with_label(ui, "BlendOpColor", format!("{:?}", selected), |ui| {
-            blend_ops.iter().for_each(|bf| {
-                ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
+            let mut selected = blend_state.color.operation;
+            let old_selected = selected.clone();
+            combo_box_with_label(ui, "BlendOpColor", format!("{:?}", selected), |ui| {
+                blend_ops.iter().for_each(|bf| {
+                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+                });
             });
-        });
-        selected_changed |= self.app.color_state_descriptor.color_blend.operation != selected;
-        self.app.color_state_descriptor.color_blend.operation = selected;
+            selected_changed |= old_selected != selected;
+        }
 
-        selected = self.app.color_state_descriptor.alpha_blend.operation;
-        combo_box_with_label(ui, "BlendOpAlpha", format!("{:?}", selected), |ui| {
-            blend_ops.iter().for_each(|bf| {
-                ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
+            let mut selected = blend_state.alpha.operation;
+            let old_selected = selected.clone();
+            combo_box_with_label(ui, "BlendOpAlpha", format!("{:?}", selected), |ui| {
+                blend_ops.iter().for_each(|bf| {
+                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+                });
             });
-        });
-        selected_changed |= self.app.color_state_descriptor.alpha_blend.operation != selected;
-        self.app.color_state_descriptor.alpha_blend.operation = selected;
+            selected_changed |= old_selected != selected;
+        }
 
         self.app.recreate_pipeline |= selected_changed;
     }
@@ -444,11 +461,11 @@ impl Gui {
     pub fn edit_cutoff_color(&mut self, ui: &mut Ui) {
         let mut color = self.app.tracer.cutoff_color;
         let mut rgb = (color[0] + color[1] + color[2]) / 3.;
-        ui.add(Slider::f32(&mut rgb, 0.00001..=0.05).text("Cutoff RGB"));
+        ui.add(Slider::new::<f32>(&mut rgb, 0.00001..=0.05).text("Cutoff RGB"));
         color[0] = rgb;
         color[1] = rgb;
         color[2] = rgb;
-        ui.add(Slider::f32(&mut color[3], 0.00001..=0.05).text("Cutoff Alpha"));
+        ui.add(Slider::new::<f32>(&mut color[3], 0.00001..=0.05).text("Cutoff Alpha"));
         self.app.tracer.cutoff_color = color;
     }
 
@@ -460,7 +477,7 @@ impl Gui {
 
     pub fn grid_size(&mut self, ui: &mut Ui) {
         let mut grid_size = self.app.tracer.grid.get_dist();
-        ui.add(Slider::f64(&mut grid_size, 0.01..=0.1).text("Grid size"));
+        ui.add(Slider::new::<f64>(&mut grid_size, 0.01..=0.1).text("Grid size"));
         self.app
             .tracer
             .grid
@@ -500,12 +517,12 @@ impl Gui {
                 let mut init_len = V2::new(re, im).norm();
                 let mut nth_turn = (std::f64::consts::TAU / angle).round() as u64;
                 ui.add(
-                    Slider::f64(&mut init_len, 0.9997..=1.0002)
+                    Slider::new::<f64>(&mut init_len, 0.9997..=1.0002)
                         .text("Init length")
                         .clamp_to_range(true),
                 );
                 ui.label("1/nth turn; n:");
-                ui.add(DragValue::u64(&mut nth_turn).clamp_range(4.0..=1000000.0));
+                ui.add(DragValue::new::<u64>(&mut nth_turn).clamp_range(4.0..=1000000.0));
                 angle = std::f64::consts::TAU / (nth_turn as f64);
                 let (im, re) = angle.sin_cos();
                 c.re = re * init_len;
@@ -517,14 +534,14 @@ impl Gui {
                 ref mut d,
             } => {
                 ui.label("r:");
-                ui.add(DragValue::u64(r).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(r).clamp_range(1.0..=50000.0));
                 if s < r {
                     *s = *r;
                 }
                 ui.label("R:");
-                ui.add(DragValue::u64(s).clamp_range((*r as f32)..=50000.0));
+                ui.add(DragValue::new::<u64>(s).clamp_range((*r as f32)..=50000.0));
                 ui.label("d:");
-                ui.add(DragValue::u64(d).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(d).clamp_range(1.0..=50000.0));
             }
             Curve::Lissajous {
                 ref mut a,
@@ -532,11 +549,11 @@ impl Gui {
                 ref mut delta,
             } => {
                 ui.label("a:");
-                ui.add(DragValue::u64(a).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(a).clamp_range(1.0..=50000.0));
                 ui.label("b:");
-                ui.add(DragValue::u64(b).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(b).clamp_range(1.0..=50000.0));
                 ui.label("delta:");
-                ui.add(DragValue::f64(delta).clamp_range(1.0..=std::f32::consts::PI));
+                ui.add(DragValue::new::<f64>(delta).clamp_range(1.0..=std::f32::consts::PI));
             }
         }
     }
@@ -553,7 +570,7 @@ impl Gui {
             return;
         }
         ui.add(
-            DragValue::usize(&mut string_mod.modulo_color_index)
+            DragValue::new::<usize>(&mut string_mod.modulo_color_index)
                 .clamp_range(0.0..=(string_mod.modulo_colors.len() as f32 - 0.9)),
         );
         let ModRemColor {
@@ -567,8 +584,8 @@ impl Gui {
             &mut color,
             color_picker::Alpha::OnlyBlend,
         );
-        ui.add(DragValue::u64(modulo).clamp_range(1.0..=50000.0));
-        ui.add(DragValue::u64(rem).clamp_range(0.0..=*modulo as f32 - 0.9));
+        ui.add(DragValue::new::<u64>(modulo).clamp_range(1.0..=50000.0));
+        ui.add(DragValue::new::<u64>(rem).clamp_range(0.0..=*modulo as f32 - 0.9));
         let rgba = Rgba::from(color);
         string_mod.modulo_colors[string_mod.modulo_color_index].color =
             [rgba[0], rgba[1], rgba[2], rgba[3]];
@@ -576,7 +593,7 @@ impl Gui {
 
     pub fn string_mod_selector(&mut self, ui: &mut Ui) {
         ui.add(
-            DragValue::usize(&mut self.app.string_mod_ix)
+            DragValue::new::<usize>(&mut self.app.string_mod_ix)
                 .clamp_range(0.0..=self.app.string_mods.len() as f32 - 0.9),
         );
         if ui.button("Add StringMod").clicked() {
@@ -593,7 +610,7 @@ impl Gui {
         }
     }
 
-    pub fn update(
+    pub fn winit_update(
         &mut self,
         event: &winit::event::WindowEvent,
         sc_desc: &wgpu::SwapChainDescriptor,

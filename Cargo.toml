@@ -7,19 +7,20 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = "0.24"
-rayon = "1.4.0"
-wgpu = { version = "0.7", features = ["webgl"] }
+nalgebra = "0.26"
+rayon = "1.5"
+wgpu = { version = "0.8", features = ["webgl"] }
 bytemuck = "1"
 log = "0.4"
 chrono = "0.4"
 futures-lite = "1.11"
-egui = "0.10"
-epi = "0.10"
-egui_winit_platform = {git = "https://github.com/hasenbanck/egui_winit_platform"}
+egui = "0.12"
+epi = "0.12"
+egui_winit_platform = "0.7"
 winit = { version = "0.24", features = ["web-sys"] }
 cgmath = "0.17"
 instant = "0.1"
+image = "0.23"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wgpu-subscriber = "0.1"
@@ -38,5 +39,5 @@ js-sys = "0.3.46"
 git = "https://github.com/sphereflow/collision2d"
 
 # for local development
-# [patch."https://github.com/sphereflow/collision2d"]
-# collision2d = { path = "../collision2d" }
+[patch."https://github.com/sphereflow/collision2d"]
+collision2d = { path = "../collision2d" }

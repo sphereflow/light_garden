@@ -10,6 +10,7 @@ use rayon::prelude::*;
 use std::{collections::VecDeque, f64::consts::*};
 pub use string_mod::*;
 pub use tracer::*;
+use wgpu::BlendState;
 
 pub mod grid;
 pub mod light;
@@ -37,16 +38,18 @@ impl LightGarden {
     pub fn new(canvas_bounds: Rect, descriptor_format: wgpu::TextureFormat) -> LightGarden {
         let color_state_descriptor = wgpu::ColorTargetState {
             format: descriptor_format,
-            alpha_blend: wgpu::BlendState {
-                src_factor: wgpu::BlendFactor::SrcAlpha,
-                dst_factor: wgpu::BlendFactor::One,
-                operation: wgpu::BlendOperation::Add,
-            },
-            color_blend: wgpu::BlendState {
-                src_factor: wgpu::BlendFactor::One,
-                dst_factor: wgpu::BlendFactor::One,
-                operation: wgpu::BlendOperation::Add,
-            },
+            blend: Some(BlendState {
+                alpha: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::SrcAlpha,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+                color: wgpu::BlendComponent {
+                    src_factor: wgpu::BlendFactor::One,
+                    dst_factor: wgpu::BlendFactor::One,
+                    operation: wgpu::BlendOperation::Add,
+                },
+            }),
             write_mask: wgpu::ColorWrite::ALL,
         };
         LightGarden {
@@ -350,7 +353,7 @@ impl LightGarden {
                 self.mode = Mode::NoMode;
             }
 
-            Mode::StringMod=> {}
+            Mode::StringMod => {}
         }
     }
 

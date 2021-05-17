@@ -65,7 +65,7 @@ impl TextureRenderer {
         let dimensions = Extent3d {
             width: sc_desc.width,
             height: sc_desc.height,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let render_texture = device.create_texture(&TextureDescriptor {
             label: Some("render_texture"),
@@ -156,7 +156,7 @@ impl TextureRenderer {
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::InputStepMode::Vertex,
-                    attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float4, 2 => Float2],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
                 }],
             },
             fragment: Some(FragmentState {
@@ -186,7 +186,7 @@ impl TextureRenderer {
                     visibility: wgpu::ShaderStage::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         multisampled: false,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
                         view_dimension: wgpu::TextureViewDimension::D2,
                     },
                     count: None,
@@ -232,7 +232,7 @@ impl TextureRenderer {
         let dimensions = Extent3d {
             width: sc_desc.width,
             height: sc_desc.height,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         self.render_texture = device.create_texture(&TextureDescriptor {
             label: Some("render_texture"),

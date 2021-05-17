@@ -49,13 +49,13 @@ impl Grid {
     pub fn snap_to_grid(&self, pos: &mut P2) {
         if self.on {
             *pos -= self.bottom_left.coords;
-            let mut  mod_x = pos.x % self.dist;
+            let mut mod_x = pos.x % self.dist;
             let mut mod_y = pos.y % self.dist;
             if mod_x > 0.5 * self.dist {
-              mod_x -= self.dist;
+                mod_x -= self.dist;
             }
             if mod_y > 0.5 * self.dist {
-              mod_y -= self.dist;
+                mod_y -= self.dist;
             }
             *pos -= V2::new(mod_x, mod_y);
             *pos += self.bottom_left.coords;
@@ -81,8 +81,11 @@ impl Grid {
         }
     }
 
-    pub fn get_color(&self) -> Color { self.color }
-    pub fn set_color(&mut self, color: Color) { self.color = color; 
+    pub fn get_color(&self) -> Color {
+        self.color
+    }
+    pub fn set_color(&mut self, color: Color) {
+        self.color = color;
         for vertex in self.vertices.iter_mut() {
             vertex.1 = color;
         }

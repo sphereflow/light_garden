@@ -291,5 +291,4 @@ impl Tracer {
             back_buffer = Vec::new();
         }
     }
-
 }

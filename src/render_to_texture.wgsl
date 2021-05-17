@@ -1,29 +1,25 @@
-[[location(0)]]
-var<in> in_pos: vec2<f32>;
-[[location(2)]]
-var<in> in_tex_coord_vs: vec2<f32>;
-[[location(0)]]
-var<out> out_tex_coord: vec2<f32>;
-[[builtin(position)]]
-var<out> out_pos: vec4<f32>;
+struct VertexOutput {
+    [[location(0)]] tex_coord: vec2<f32>;
+    [[builtin(position)]] pos: vec4<f32>;
+};
 
 [[stage(vertex)]]
-fn vs_main() {
-    out_pos = vec4<f32>(in_pos, 0.0, 1.0);
-    out_tex_coord = in_tex_coord_vs;
+fn vs_main(
+    [[location(0)]] pos: vec2<f32>,
+    [[location(2)]] tex_coord: vec2<f32>,
+        ) -> VertexOutput {
+    var out: VertexOutput;
+    out.pos = vec4<f32>(pos, 0.0, 1.0);
+    out.tex_coord = tex_coord;
+    return out;
 }
 
-[[location(0)]]
-var<in> in_tex_coord_fs: vec2<f32>;
-[[location(0)]]
-var<out> out_color_fs: vec4<f32>;
-
 [[group(0), binding(0)]]
-var r_color: texture_2d<f32>;
+var texture: texture_2d<f32>;
 [[group(0), binding(1)]]
 var r_sampler: sampler;
 
 [[stage(fragment)]]
-fn fs_main() {
-    out_color_fs = textureSample(r_color, r_sampler, in_tex_coord_fs);
+fn fs_main([[location(0)]] tex_coord: vec2<f32>) -> [[location(0)]] vec4<f32> {
+    return textureSample(texture, r_sampler, tex_coord);
 }

@@ -2,8 +2,8 @@ use crate::framework::cast_slice;
 use crate::gui::Gui;
 use bytemuck::{Pod, Zeroable};
 use egui::*;
-use std::iter;
 use std::sync::Arc;
+use std::{iter, num::NonZeroU32};
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -15,6 +15,7 @@ struct UniformBuffer {
 unsafe impl Pod for UniformBuffer {}
 unsafe impl Zeroable for UniformBuffer {}
 
+#[derive(Debug)]
 struct SizedBuffer {
     buffer: Buffer,
     size: usize,
@@ -41,13 +42,29 @@ pub struct EguiRenderer {
     texture_bind_group: Option<BindGroup>,
     next_user_texture_id: u64,
     pending_user_textures: Vec<(u64, egui::Texture)>,
-    user_textures: Vec<Option<wgpu::BindGroup>>,
+    user_textures: Vec<Option<BindGroup>>,
 }
 
 impl EguiRenderer {
-    pub fn init(device: &Device, output_format: TextureFormat) -> Self {
-        let vs_module = device.create_shader_module(&include_spirv!("egui.vert.spv"));
-        let fs_module = device.create_shader_module(&include_spirv!("egui.frag.spv"));
+    pub fn init(device: &Device, adapter: &Adapter, output_format: TextureFormat) -> Self {
+        // let vs_module = device.create_shader_module(&include_spirv!("egui.vert.spv"));
+        // let fs_module = device.create_shader_module(&include_spirv!("egui.frag.spv"));
+
+        let mut flags = wgpu::ShaderFlags::VALIDATION;
+        match adapter.get_info().backend {
+            wgpu::Backend::Metal | wgpu::Backend::Vulkan => {
+                flags |= wgpu::ShaderFlags::EXPERIMENTAL_TRANSLATION
+            }
+            _ => (), //TODO
+        }
+
+        use std::borrow::Cow;
+        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+            label: Some("egui: wgsl shader module"),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("egui.wgsl"))),
+            flags,
+        });
+
         // eguis initialization
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("egui: uniform_buffer"),
@@ -56,6 +73,8 @@ impl EguiRenderer {
             }]),
             usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
         });
+
+        // uniform buffer for screen size
         let uniform_buffer = SizedBuffer {
             buffer: uniform_buffer,
             size: std::mem::size_of::<UniformBuffer>(),
@@ -100,11 +119,11 @@ impl EguiRenderer {
             entries: &[
                 wgpu::BindGroupEntry {
                     binding: 0,
-                    resource: wgpu::BindingResource::Buffer {
+                    resource: wgpu::BindingResource::Buffer(BufferBinding {
                         buffer: &uniform_buffer.buffer,
                         offset: 0,
                         size: None,
-                    },
+                    }),
                 },
                 wgpu::BindGroupEntry {
                     binding: 1,
@@ -130,6 +149,7 @@ impl EguiRenderer {
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("egui_pipeline_layout"),
+            // layout => [set 0: uniform bind group, set 1: texture bind group]
             bind_group_layouts: &[&uniform_bind_group_layout, &texture_bind_group_layout],
             push_constant_ranges: &[],
         });
@@ -138,20 +158,22 @@ impl EguiRenderer {
             label: Some("egui_pipeline"),
             layout: Some(&pipeline_layout),
             vertex: wgpu::VertexState {
-                entry_point: "main",
-                module: &vs_module,
+                entry_point: "vs_main",
+                module: &shader,
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 5 * 4,
                     step_mode: wgpu::InputStepMode::Vertex,
                     // 0: vec2 position
                     // 1: vec2 texture coordinates
                     // 2: uint color
-                    attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float2, 2 => Uint],
+                    attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Uint32],
                 }],
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                cull_mode: wgpu::CullMode::default(),
+                clamp_depth: false,
+                conservative: false,
+                cull_mode: None,
                 front_face: wgpu::FrontFace::default(),
                 polygon_mode: wgpu::PolygonMode::default(),
                 strip_index_format: None,
@@ -163,20 +185,22 @@ impl EguiRenderer {
                 mask: !0,
             },
             fragment: Some(wgpu::FragmentState {
-                module: &fs_module,
-                entry_point: "main",
+                module: &shader,
+                entry_point: "fs_main",
                 targets: &[wgpu::ColorTargetState {
                     format: output_format,
-                    color_blend: wgpu::BlendState {
-                        src_factor: wgpu::BlendFactor::One,
-                        dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
-                        operation: wgpu::BlendOperation::Add,
-                    },
-                    alpha_blend: wgpu::BlendState {
-                        src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
-                        dst_factor: wgpu::BlendFactor::One,
-                        operation: wgpu::BlendOperation::Add,
-                    },
+                    blend: Some(wgpu::BlendState {
+                        color: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::One,
+                            dst_factor: wgpu::BlendFactor::OneMinusSrcAlpha,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                        alpha: wgpu::BlendComponent {
+                            src_factor: wgpu::BlendFactor::OneMinusDstAlpha,
+                            dst_factor: wgpu::BlendFactor::One,
+                            operation: wgpu::BlendOperation::Add,
+                        },
+                    }),
                     write_mask: wgpu::ColorWrite::ALL,
                 }],
             }),
@@ -308,12 +332,10 @@ impl EguiRenderer {
             pixels: texture
                 .pixels
                 .iter()
-                .flat_map(|p| std::iter::repeat(*p).take(4))
+                .flat_map(|&p| Vec::from(egui::epaint::Color32::from_white_alpha(p).to_array()))
                 .collect(),
         };
-
         let bind_group = self.texture_to_wgpu(device, queue, &egui_texture, "egui");
-
         self.texture_version = Some(egui_texture.version);
         self.texture_bind_group = Some(bind_group);
     }
@@ -342,7 +364,7 @@ impl EguiRenderer {
         let size = wgpu::Extent3d {
             width: texture.width as u32,
             height: texture.height as u32,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
 
         let wgpu_texture = device.create_texture(&wgpu::TextureDescriptor {
@@ -356,16 +378,16 @@ impl EguiRenderer {
         });
 
         queue.write_texture(
-            wgpu::TextureCopyView {
+            wgpu::ImageCopyTextureBase {
                 texture: &wgpu_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
             },
             texture.pixels.as_slice(),
-            wgpu::TextureDataLayout {
+            wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: (texture.pixels.len() / texture.height) as u32,
-                rows_per_image: texture.height as u32,
+                bytes_per_row: NonZeroU32::new((texture.pixels.len() / texture.height) as u32),
+                rows_per_image: NonZeroU32::new(texture.height as u32),
             },
             size,
         );
@@ -409,10 +431,10 @@ impl EguiRenderer {
         sc_desc: &SwapChainDescriptor,
         color_attachment: &TextureView,
         gui: &mut Gui,
+        clipped_meshes: &[ClippedMesh],
     ) {
-        let clipped_meshes = gui.gui();
         self.update_texture(device, queue, gui.platform.context().texture());
-        // self.update_user_textures(device, queue);
+        self.update_user_textures(device, queue);
         self.update_buffers(
             device,
             queue,
@@ -426,8 +448,8 @@ impl EguiRenderer {
         {
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("egui render pass"),
-                color_attachments: &[RenderPassColorAttachmentDescriptor {
-                    attachment: color_attachment,
+                color_attachments: &[RenderPassColorAttachment {
+                    view: color_attachment,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
@@ -481,10 +503,10 @@ impl EguiRenderer {
         let clip_max_y = scale_factor * clip_rect.max.y;
 
         // Make sure clip rect can fit within an `u32`.
-        // let clip_min_x = clip_min_x.clamp(0., physical_width as f32);
-        // let clip_min_y = clip_min_y.clamp(0., physical_height as f32);
-        // let clip_max_x = clip_max_x.clamp(clip_min_x, physical_width as f32);
-        // let clip_max_y = clip_max_y.clamp(clip_min_y, physical_height as f32);
+        let clip_min_x = clip_min_x.clamp(0., physical_width as f32);
+        let clip_min_y = clip_min_y.clamp(0., physical_height as f32);
+        let clip_max_x = clip_max_x.clamp(clip_min_x, physical_width as f32);
+        let clip_max_y = clip_max_y.clamp(clip_min_y, physical_height as f32);
 
         let clip_min_x = clip_min_x.round() as u32;
         let clip_min_y = clip_min_y.round() as u32;

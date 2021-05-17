@@ -5,7 +5,8 @@ use crate::light_garden::LightGarden;
 use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};
 use bytemuck::{Pod, Zeroable};
 use collision2d::geo::*;
-use std::iter;
+use egui::ClippedMesh;
+use std::{iter, num::NonZeroU32};
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -28,7 +29,7 @@ pub struct Renderer {
     rebuild_bundle: bool,
     texture_renderer: TextureRenderer,
     sc_desc: SwapChainDescriptor,
-    egui_renderer: EguiRenderer,
+    pub egui_renderer: EguiRenderer,
 }
 
 impl Renderer {
@@ -42,7 +43,7 @@ impl Renderer {
         app.recreate_pipeline = false;
         // layout for the projection matrix
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: None,
+            label: Some("Renderer: bind group layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
                 visibility: wgpu::ShaderStage::VERTEX,
@@ -66,7 +67,8 @@ impl Renderer {
         });
 
         // set new canvas bounds
-        app.tracer.resize(&Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64));
+        app.tracer
+            .resize(&Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64));
 
         // write to the projection matix buffer
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -74,11 +76,11 @@ impl Renderer {
             layout: &bind_group_layout,
             entries: &[BindGroupEntry {
                 binding: 0,
-                resource: BindingResource::Buffer {
+                resource: BindingResource::Buffer(BufferBinding {
                     buffer: &mx_buf,
                     offset: 0,
                     size: None,
-                },
+                }),
             }],
         });
         queue.write_buffer(&mx_buf, 0, bytemuck::cast_slice(mx_ref));
@@ -105,7 +107,7 @@ impl Renderer {
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                         step_mode: wgpu::InputStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float2, 1 => Float4, 2 => Float2],
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
                     }],
                 },
                 fragment: Some(FragmentState {
@@ -193,19 +195,18 @@ impl Renderer {
 
         use std::borrow::Cow;
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
-            label: None,
+            label: Some("Renderer: wgsl shader module"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
             flags,
         });
 
         // create the vertex buffer
-        let vertex_data: Vec<Vertex> = vec![];
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertex_data),
+            size: 0,
+            mapped_at_creation: true,
             usage: BufferUsage::VERTEX,
         });
-        let vertex_count = vertex_data.len() as u32;
         let (pipeline, bind_group) =
             Renderer::create_pipeline(&sc_desc, device, queue, &shader, app);
 
@@ -216,12 +217,12 @@ impl Renderer {
             shader,
             pipeline,
             vertex_buffer,
-            vertex_count,
+            vertex_count: 0,
             matrix_bind_group: bind_group,
             rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
             texture_renderer,
             sc_desc: sc_desc.clone(),
-            egui_renderer: EguiRenderer::init(device, sc_desc.format),
+            egui_renderer: EguiRenderer::init(device, adapter, sc_desc.format),
         }
     }
 
@@ -255,20 +256,20 @@ impl Renderer {
         let dimensions = Extent3d {
             width: self.sc_desc.width,
             height: self.sc_desc.height,
-            depth: 1,
+            depth_or_array_layers: 1,
         };
         let black: Vec<[f32; 4]> = vec![[0., 0., 0., 1.]; size];
         queue.write_texture(
-            TextureCopyView {
+            ImageCopyTexture {
                 texture: &self.texture_renderer.render_texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
             },
             bytemuck::cast_slice(black.as_slice()),
-            TextureDataLayout {
+            ImageDataLayout {
                 offset: 0,
-                bytes_per_row: self.sc_desc.width * 4 * 4,
-                rows_per_image: self.sc_desc.height,
+                bytes_per_row: NonZeroU32::new(self.sc_desc.width * 4 * 4),
+                rows_per_image: NonZeroU32::new(self.sc_desc.height),
             },
             dimensions,
         );
@@ -285,8 +286,8 @@ impl Renderer {
                 .create_view(&TextureViewDescriptor::default());
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("render to texture render pass"),
-                color_attachments: &[RenderPassColorAttachmentDescriptor {
-                    attachment: &view,
+                color_attachments: &[RenderPassColorAttachment {
+                    view: &view,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
@@ -309,6 +310,7 @@ impl Renderer {
         queue: &Queue,
         frame: &SwapChainTexture,
         gui: &mut Gui,
+        clipped_meshes: &[ClippedMesh],
     ) {
         self.clear_render_texture(queue);
         self.render_to_texture(device, queue);
@@ -331,8 +333,16 @@ impl Renderer {
             &self.texture_renderer.render_texture,
             &self.texture_renderer.sampler,
         );
-        self.egui_renderer
-            .render(device, queue, &self.sc_desc, &frame.view, gui);
+
+        self.egui_renderer.render(
+            device,
+            queue,
+            &self.sc_desc,
+            &frame.view,
+            gui,
+            clipped_meshes,
+        );
+
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("Command Encoder"),
         });
@@ -340,8 +350,8 @@ impl Renderer {
         {
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("rpass: RenderPassDescriptor"),
-                color_attachments: &[RenderPassColorAttachmentDescriptor {
-                    attachment: &frame.view,
+                color_attachments: &[RenderPassColorAttachment {
+                    view: &frame.view,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
@@ -361,9 +371,16 @@ impl Renderer {
             // vertex range, instance range
         }
         queue.submit(iter::once(encoder.finish()));
-        // egui renders here
-        self.egui_renderer
-            .render(device, queue, &self.sc_desc, &frame.view, gui);
+        
+        self.egui_renderer.render(
+            device,
+            queue,
+            &self.sc_desc,
+            &frame.view,
+            gui,
+            clipped_meshes,
+        );
+
     }
 
     pub fn render(
@@ -372,6 +389,7 @@ impl Renderer {
         device: &Device,
         queue: &Queue,
         gui: &mut Gui,
+        clipped_meshes: &[ClippedMesh],
     ) {
         let vb = gui.app.draw();
         // self.update_vertex_buffer_with_line_strips(device, &vb);
@@ -385,7 +403,7 @@ impl Renderer {
         }
 
         if gui.app.get_render_to_texture() {
-            self.render_texture(device, queue, frame, gui);
+            self.render_texture(device, queue, frame, gui, clipped_meshes);
         } else {
             let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
                 label: Some("Command Encoder"),
@@ -394,8 +412,8 @@ impl Renderer {
             {
                 let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("rpass: RenderPassDescriptor"),
-                    color_attachments: &[RenderPassColorAttachmentDescriptor {
-                        attachment: &frame.view,
+                    color_attachments: &[RenderPassColorAttachment {
+                        view: &frame.view,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(wgpu::Color::BLACK),
@@ -410,9 +428,16 @@ impl Renderer {
                 rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
             }
             queue.submit(iter::once(encoder.finish()));
-            // egui renders here
-            self.egui_renderer
-                .render(device, queue, &self.sc_desc, &frame.view, gui);
+
+            self.egui_renderer.render(
+                device,
+                queue,
+                &self.sc_desc,
+                &frame.view,
+                gui,
+                clipped_meshes,
+            );
+
         }
     }
 }

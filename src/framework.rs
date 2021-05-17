@@ -1,12 +1,32 @@
 use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
-#[cfg(not(target_arch = "wasm32"))]
+use epi::{App, RepaintSignal};
 use futures_lite::future;
+use std::sync::{Arc, Mutex};
+use winit::event_loop::EventLoopProxy;
 use winit::{
     dpi::LogicalSize,
     event::{self, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
 };
+
+enum CustomEvent {
+    RequestRedraw,
+}
+
+pub struct CustomRepaintSignal {
+    event_loop_proxy: Mutex<EventLoopProxy<CustomEvent>>,
+}
+
+impl RepaintSignal for CustomRepaintSignal {
+    fn request_repaint(&self) {
+        self.event_loop_proxy
+            .lock()
+            .unwrap()
+            .send_event(CustomEvent::RequestRedraw)
+            .ok();
+    }
+}
 
 #[rustfmt::skip]
 #[allow(unused)]
@@ -33,7 +53,7 @@ pub enum ShaderStage {
 
 struct Setup {
     window: winit::window::Window,
-    event_loop: EventLoop<()>,
+    event_loop: EventLoop<CustomEvent>,
     instance: wgpu::Instance,
     size: winit::dpi::PhysicalSize<u32>,
     surface: wgpu::Surface,
@@ -51,7 +71,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
         );
     };
 
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::with_user_event();
     let mut builder = winit::window::WindowBuilder::new()
         .with_inner_size(LogicalSize::new(width as f32, height as f32));
     builder = builder.with_title(title);
@@ -110,7 +130,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     let (device, queue) = adapter
         .request_device(
             &wgpu::DeviceDescriptor {
-                label: None,
+                label: Some("Framework: device descriptor"),
                 features: (optional_features & adapter_features) | required_features,
                 limits: needed_limits,
             },
@@ -145,7 +165,9 @@ fn start(
 ) {
     let mut sc_desc = wgpu::SwapChainDescriptor {
         usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-        format: adapter.get_swap_chain_preferred_format(&surface),
+        format: adapter
+            .get_swap_chain_preferred_format(&surface)
+            .expect("Could not get preferred swap chain format"),
         width: size.width,
         height: size.height,
         present_mode: wgpu::PresentMode::Mailbox,
@@ -155,6 +177,9 @@ fn start(
     log::info!("Initializing the example...");
     let mut gui = Gui::new(&window, &sc_desc);
     let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, &mut gui.app);
+    let repaint_signal = Arc::new(CustomRepaintSignal {
+        event_loop_proxy: Mutex::new(event_loop.create_proxy()),
+    });
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
@@ -163,7 +188,7 @@ fn start(
         } else {
             #[cfg(not(target_arch = "wasm32"))]
             {
-                use instant::{Instant, Duration};
+                use instant::{Duration, Instant};
                 ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(10))
             }
             #[cfg(target_arch = "wasm32")]
@@ -171,6 +196,8 @@ fn start(
                 ControlFlow::Poll
             }
         };
+
+        gui.platform.handle_event(&event);
 
         match event {
             event::Event::MainEventsCleared => {
@@ -191,7 +218,7 @@ fn start(
                     *control_flow = ControlFlow::Exit;
                 }
                 _ => {
-                    gui.update(event, &sc_desc);
+                    gui.winit_update(event, &sc_desc);
                 }
             },
             event::Event::RedrawRequested(_) => {
@@ -204,7 +231,26 @@ fn start(
                             .expect("Failed to acquire next swap chain texture!")
                     }
                 };
-                renderer.render(&frame.output, &device, &queue, &mut gui);
+
+                gui.platform.begin_frame();
+                let mut app_output = epi::backend::AppOutput::default();
+                let mut egui_frame = epi::backend::FrameBuilder {
+                    info: epi::IntegrationInfo {
+                        web_info: None,
+                        cpu_usage: None,
+                        seconds_since_midnight: None,
+                        native_pixels_per_point: None,
+                    },
+                    tex_allocator: &mut renderer.egui_renderer,
+                    output: &mut app_output,
+                    repaint_signal: repaint_signal.clone(),
+                }
+                .build();
+                gui.update(&gui.platform.context(), &mut egui_frame);
+                let (_output, clipped_shapes) = gui.platform.end_frame();
+                let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
+
+                renderer.render(&frame.output, &device, &queue, &mut gui, &clipped_meshes); // &clipped_meshes);
             }
 
             _ => {}
@@ -213,7 +259,6 @@ fn start(
         if gui.ui_mode == UiMode::Exiting {
             *control_flow = ControlFlow::Exit;
         }
-        gui.platform.handle_event(&event);
     });
 }
 
