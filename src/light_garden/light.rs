@@ -34,11 +34,11 @@ impl Light {
             Light::SpotLight(l) => l.color,
         }
     }
-    pub fn set_color(&mut self, r: f32, g: f32, b: f32, a: f32) {
+    pub fn set_color(&mut self, red: f32, green: f32, blue: f32, alpha: f32) {
         match self {
-            Light::PointLight(l) => l.set_color([r, g, b, a]),
-            Light::DirectionalLight(l) => l.set_color([r, g, b, a]),
-            Light::SpotLight(l) => l.set_color([r, g, b, a]),
+            Light::PointLight(light) => light.set_color([red, green, blue, alpha]),
+            Light::DirectionalLight(light) => light.set_color([red, green, blue, alpha]),
+            Light::SpotLight(light) => light.set_color([red, green, blue, alpha]),
         }
     }
     pub fn set_num_rays(&mut self, num_rays: u32) {

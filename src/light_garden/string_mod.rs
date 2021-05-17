@@ -58,13 +58,13 @@ impl StringMod {
                     .map(|n| {
                         let angle =
                             (self.turns * n) as Float * std::f64::consts::TAU / (m as Float);
-                        let r = r as f64;
-                        let s = s as f64;
-                        let smr = s - r;
-                        let d = d as f64;
-                        let ratio = smr + d;
-                        let x = smr * angle.cos() + d * (angle * smr / r).cos();
-                        let y = smr * angle.sin() - d * (angle * smr / r).sin();
+                        let small_radius = r as f64;
+                        let big_radius = s as f64;
+                        let smr = big_radius - small_radius;
+                        let off_center = d as f64;
+                        let ratio = smr + off_center;
+                        let x = smr * angle.cos() + off_center * (angle * smr / small_radius).cos();
+                        let y = smr * angle.sin() - off_center * (angle * smr / small_radius).sin();
                         P2::new(x, y) / ratio
                     })
                     .collect();
@@ -106,14 +106,14 @@ impl StringMod {
         if points.is_empty() {
             return res;
         }
-        let m = self.modulo;
+        let modulo = self.modulo;
         // we start at the index: 0
         for iix in 0..self.modulo {
             let ix = match self.mode {
-                StringModMode::Add => ((iix + self.num) % m) as usize,
-                StringModMode::Mul => ((iix * self.num) % m) as usize,
-                StringModMode::Pow => (iix.pow(self.num as u32) % m) as usize,
-                StringModMode::Base => (self.num.pow(iix as u32) % m) as usize,
+                StringModMode::Add => ((iix + self.num) % modulo) as usize,
+                StringModMode::Mul => ((iix * self.num) % modulo) as usize,
+                StringModMode::Pow => (iix.pow(self.num as u32) % modulo) as usize,
+                StringModMode::Base => (self.num.pow(iix as u32) % modulo) as usize,
             };
             res.push((points[iix as usize % points.len()], self.get_color(iix)));
             res.push((points[ix % points.len()], self.get_color(ix as u64)));
@@ -155,6 +155,12 @@ impl StringMod {
         } else {
             self.draw_init_points(self.init_points())
         }
+    }
+}
+
+impl Default for string_mod::StringMod {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

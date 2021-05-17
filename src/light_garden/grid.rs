@@ -31,14 +31,14 @@ impl Grid {
         let [_right, bottom, left, _top] = bounds.line_segments();
         for i in 0..=num_horizontal_lines {
             let y_shift = i as f64 * -self.dist;
-            let mut line = bottom.clone();
+            let mut line = bottom;
             line.shift(line.get_normal().into_inner() * y_shift);
             self.vertices.push((line.get_a(), self.color));
             self.vertices.push((line.get_b(), self.color));
         }
         for i in 0..=num_vertical_lines {
             let x_shift = i as f64 * -self.dist;
-            let mut line = left.clone();
+            let mut line = left;
             line.shift(line.get_normal().into_inner() * x_shift);
             self.vertices.push((line.get_a(), self.color));
             self.vertices.push((line.get_b(), self.color));
@@ -75,7 +75,7 @@ impl Grid {
     }
 
     pub fn set_dist(&mut self, dist: f64, bounds: &Rect) {
-        if self.dist != dist {
+        if (self.dist - dist).abs() < f64::EPSILON {
             self.dist = dist;
             self.update_canvas_bounds(bounds);
         }

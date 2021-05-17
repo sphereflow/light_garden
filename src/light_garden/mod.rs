@@ -450,7 +450,7 @@ impl LightGarden {
             for s in &self.string_mods {
                 res.append(&mut s.draw());
             }
-            return res;
+            res
         } else {
             self.tracer.trace_all()
         }

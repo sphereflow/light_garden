@@ -294,7 +294,7 @@ impl Gui {
                 let mut spot_angle = spot.spot_angle * 180. / PI;
                 let old_spot_angle = spot_angle;
                 ui.add(Slider::new::<f64>(&mut spot_angle, 0.0..=360.0).text("Spot Angle"));
-                if spot_angle != old_spot_angle {
+                if (spot_angle - old_spot_angle).abs() < Float::EPSILON {
                     spot.spot_angle = spot_angle * PI / 180.;
                     update_light = true;
                 }
@@ -382,47 +382,55 @@ impl Gui {
         let mut selected_changed = false;
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let mut selected = blend_state.color.src_factor;
-            let old_selected = selected.clone();
-            combo_box_with_label(ui, "ColorSrc", format!("{:?}", selected), |ui| {
-                blend_factors.iter().for_each(|bf| {
-                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+            let selected = &mut blend_state.color.src_factor;
+            let old_selected = *selected;
+            ComboBox::from_label("ColorSrc")
+                .selected_text(format!("{:?}", selected))
+                .show_ui(ui, |ui| {
+                    blend_factors.iter().for_each(|bf| {
+                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
+                    });
                 });
-            });
-            selected_changed |= old_selected != selected;
+            selected_changed = old_selected != *selected;
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let mut selected = blend_state.color.dst_factor;
-            let old_selected = selected.clone();
-            combo_box_with_label(ui, "ColorDst", format!("{:?}", selected), |ui| {
-                blend_factors.iter().for_each(|bf| {
-                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+            let selected = &mut blend_state.color.dst_factor;
+            let old_selected = *selected;
+            ComboBox::from_label("ColorDst")
+                .selected_text(format!("{:?}", selected))
+                .show_ui(ui, |ui| {
+                    blend_factors.iter().for_each(|bf| {
+                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
+                    });
                 });
-            });
-            selected_changed |= old_selected != selected;
+            selected_changed |= old_selected != *selected;
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let mut selected = blend_state.alpha.src_factor;
-            let old_selected = selected.clone();
-            combo_box_with_label(ui, "AlphaSrc", format!("{:?}", selected), |ui| {
-                blend_factors.iter().for_each(|bf| {
-                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+            let selected = &mut blend_state.alpha.src_factor;
+            let old_selected = *selected;
+            ComboBox::from_label("AlphaSrc")
+                .selected_text(format!("{:?}", selected))
+                .show_ui(ui, |ui| {
+                    blend_factors.iter().for_each(|bf| {
+                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
+                    });
                 });
-            });
-            selected_changed |= old_selected != selected;
+            selected_changed |= old_selected != *selected;
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let mut selected = blend_state.alpha.dst_factor;
-            let old_selected = selected.clone();
-            combo_box_with_label(ui, "AlphaDst", format!("{:?}", selected), |ui| {
-                blend_factors.iter().for_each(|bf| {
-                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+            let selected = &mut blend_state.alpha.dst_factor;
+            let old_selected = *selected;
+            ComboBox::from_label("AlphaDst")
+                .selected_text(format!("{:?}", selected))
+                .show_ui(ui, |ui| {
+                    blend_factors.iter().for_each(|bf| {
+                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
+                    });
                 });
-            });
-            selected_changed |= old_selected != selected;
+            selected_changed |= old_selected != *selected;
         }
 
         let blend_ops: &[BlendOperation] = &[
@@ -434,25 +442,29 @@ impl Gui {
         ];
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let mut selected = blend_state.color.operation;
-            let old_selected = selected.clone();
-            combo_box_with_label(ui, "BlendOpColor", format!("{:?}", selected), |ui| {
-                blend_ops.iter().for_each(|bf| {
-                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+            let selected = &mut blend_state.color.operation;
+            let old_selected = *selected;
+            ComboBox::from_label("BlendOpColor")
+                .selected_text(format!("{:?}", selected))
+                .show_ui(ui, |ui| {
+                    blend_ops.iter().for_each(|bf| {
+                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
+                    });
                 });
-            });
-            selected_changed |= old_selected != selected;
+            selected_changed |= old_selected != *selected;
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let mut selected = blend_state.alpha.operation;
-            let old_selected = selected.clone();
-            combo_box_with_label(ui, "BlendOpAlpha", format!("{:?}", selected), |ui| {
-                blend_ops.iter().for_each(|bf| {
-                    ui.selectable_value(&mut selected, *bf, format!("{:?}", bf));
+            let selected = &mut blend_state.alpha.operation;
+            let old_selected = *selected;
+            ComboBox::from_label("BlendOpAlpha")
+                .selected_text(format!("{:?}", selected))
+                .show_ui(ui, |ui| {
+                    blend_ops.iter().for_each(|bf| {
+                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
+                    });
                 });
-            });
-            selected_changed |= old_selected != selected;
+            selected_changed |= old_selected != *selected;
         }
 
         self.app.recreate_pipeline |= selected_changed;
@@ -600,12 +612,10 @@ impl Gui {
             let new = self.get_current_string_mod().clone();
             self.app.string_mods.push(new);
         }
-        if self.app.string_mods.len() > 1 {
-            if ui.button("Delete current StringMod").clicked() {
-                self.app.string_mods.remove(self.app.string_mod_ix);
-                if self.app.string_mod_ix >= self.app.string_mods.len() {
-                    self.app.string_mod_ix -= 1;
-                }
+        if self.app.string_mods.len() > 1 && ui.button("Delete current StringMod").clicked() {
+            self.app.string_mods.remove(self.app.string_mod_ix);
+            if self.app.string_mod_ix >= self.app.string_mods.len() {
+                self.app.string_mod_ix -= 1;
             }
         }
     }
@@ -732,5 +742,11 @@ pub enum UiMode {
 impl UiMode {
     pub fn new() -> UiMode {
         UiMode::Main
+    }
+}
+
+impl Default for UiMode {
+    fn default() -> Self {
+        Self::new()
     }
 }
