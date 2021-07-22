@@ -6,6 +6,7 @@ use instant::Instant;
 pub use light::*;
 use na::{distance, Point2};
 pub use object::*;
+#[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
 use std::{collections::VecDeque, f64::consts::*};
 pub use string_mod::*;
@@ -32,6 +33,7 @@ pub struct LightGarden {
     render_to_texture: bool,
     pub string_mods: Vec<StringMod>,
     pub string_mod_ix: usize,
+    pub screenshot_path: Option<String>,
 }
 
 impl LightGarden {
@@ -61,11 +63,12 @@ impl LightGarden {
             recreate_pipeline: true,
             num_rays: 2000,
             selected_color: [0.02, 0.03, 0.05, 0.01],
-            render_to_texture: true,
+            render_to_texture: false,
             ray_width: 1.0,
             mode: Mode::NoMode,
             string_mods: vec![StringMod::new()],
             string_mod_ix: 0,
+            screenshot_path: None,
         }
     }
 

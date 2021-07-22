@@ -6,6 +6,8 @@ use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};
 use bytemuck::{Pod, Zeroable};
 use collision2d::geo::*;
 use egui::ClippedMesh;
+use half::f16;
+use image::save_buffer_with_format;
 use std::{iter, num::NonZeroU32};
 use wgpu::util::DeviceExt;
 use wgpu::*;
@@ -30,6 +32,7 @@ pub struct Renderer {
     texture_renderer: TextureRenderer,
     sc_desc: SwapChainDescriptor,
     pub egui_renderer: EguiRenderer,
+    pub make_screenshot: bool,
 }
 
 impl Renderer {
@@ -223,6 +226,7 @@ impl Renderer {
             texture_renderer,
             sc_desc: sc_desc.clone(),
             egui_renderer: EguiRenderer::init(device, adapter, sc_desc.format),
+            make_screenshot: false,
         }
     }
 
@@ -304,6 +308,139 @@ impl Renderer {
         queue.submit(iter::once(encoder.finish()));
     }
 
+    pub async fn make_screenshot(
+        &mut self,
+        path: String,
+        device: &Device,
+        queue: &Queue,
+        render_to_texture: bool,
+    ) {
+        let texture_extent = Extent3d {
+            width: self.sc_desc.width,
+            height: self.sc_desc.height,
+            depth_or_array_layers: 1,
+        };
+        let format;
+        let unpadded_bytes_per_row;
+        if render_to_texture {
+            format = RENDER_TEXTURE_FORMAT;
+            unpadded_bytes_per_row = 8 * self.sc_desc.width;
+        } else {
+            format = TextureFormat::Bgra8UnormSrgb;
+            unpadded_bytes_per_row = 4 * self.sc_desc.width;
+        }
+        let texture = device.create_texture(&TextureDescriptor {
+            size: texture_extent,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: TextureDimension::D2,
+            format,
+            usage: TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::COPY_SRC,
+            label: None,
+        });
+        let view = &texture.create_view(&TextureViewDescriptor::default());
+        let mut screenshot_encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("Command screenshot_encoder"),
+        });
+        {
+            let mut rpass = screenshot_encoder.begin_render_pass(&RenderPassDescriptor {
+                label: Some("rpass screenshot: RenderPassDescriptor"),
+                color_attachments: &[RenderPassColorAttachment {
+                    view,
+                    resolve_target: None,
+                    ops: Operations {
+                        load: LoadOp::Clear(wgpu::Color::BLACK),
+                        store: true,
+                    },
+                }],
+                depth_stencil_attachment: None,
+            });
+            rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
+            rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
+        }
+        let copy_wrapper = ImageCopyTexture {
+            texture: &texture,
+            mip_level: 0,
+            origin: Origin3d::ZERO,
+        };
+        let align = COPY_BYTES_PER_ROW_ALIGNMENT;
+        let is_aligned = match (unpadded_bytes_per_row) % align {
+            0 => 0,
+            _ => 1,
+        };
+        let padded_bytes_per_row = (((unpadded_bytes_per_row) / align) + is_aligned) * align;
+        let buff_desc = BufferDescriptor {
+            label: Some("screen shot buffer descriptor"),
+            mapped_at_creation: false,
+            size: (padded_bytes_per_row * self.sc_desc.height) as u64,
+            usage: BufferUsage::MAP_READ | BufferUsage::COPY_DST,
+        };
+        let buff: Buffer = device.create_buffer(&buff_desc);
+        let copy_buffer = ImageCopyBuffer {
+            buffer: &buff,
+            layout: ImageDataLayout {
+                offset: 0,
+                bytes_per_row: NonZeroU32::new(padded_bytes_per_row),
+                rows_per_image: NonZeroU32::new(self.sc_desc.height),
+            },
+        };
+        screenshot_encoder.copy_texture_to_buffer(copy_wrapper, copy_buffer, texture_extent);
+
+        queue.submit(iter::once(screenshot_encoder.finish()));
+        let buffer_slice = buff.slice(..);
+        let bytes_future = buffer_slice.map_async(MapMode::Read);
+        device.poll(Maintain::Wait);
+
+        if let Ok(()) = bytes_future.await {
+            let padded_buffer = buffer_slice.get_mapped_range();
+            let mut bufvec = Vec::new();
+            for padded in padded_buffer.chunks(padded_bytes_per_row as usize) {
+                if render_to_texture {
+                    for pixel in padded[..(unpadded_bytes_per_row) as usize].chunks_exact(8) {
+                        bufvec.extend_from_slice(&Renderer::convert_pixel_rgbaf16_to_bgra8(pixel));
+                    }
+                } else {
+                    bufvec.extend_from_slice(&padded[..(unpadded_bytes_per_row) as usize])
+                }
+            }
+            match save_buffer_with_format(
+                path,
+                &bufvec,
+                self.sc_desc.width,
+                self.sc_desc.height,
+                image::ColorType::Bgra8,
+                image::ImageFormat::Jpeg,
+            ) {
+                Ok(()) => {}
+                Err(e) => {
+                    println!("Error: could not make screenshot");
+                    println!("Message: {}", e);
+                }
+            };
+            drop(padded_buffer);
+        }
+        buff.unmap();
+    }
+
+    fn convert_pixel_rgbaf16_to_bgra8(pixel: &[u8]) -> [u8; 4] {
+        let r = &pixel[0..2];
+        let g = &pixel[2..4];
+        let b = &pixel[4..6];
+        let a = &pixel[6..];
+        let nr = Renderer::f16_to_u8(r);
+        let ng = Renderer::f16_to_u8(g);
+        let nb = Renderer::f16_to_u8(b);
+        let na = Renderer::f16_to_u8(a);
+        [nb, ng, nr, na]
+    }
+
+    fn f16_to_u8(half: &[u8]) -> u8 {
+        let f: f32 = f16::from_le_bytes([half[0], half[1]]).into();
+        ((f.powf(1. / 2.2)) * 255.) as u8
+    }
+
     fn render_texture(
         &mut self,
         device: &Device,
@@ -360,6 +497,7 @@ impl Renderer {
                 }],
                 depth_stencil_attachment: None,
             });
+
             rpass.set_pipeline(&self.texture_renderer.pipeline);
             rpass.set_bind_group(0, &self.texture_renderer.bind_group, &[]);
             rpass.set_vertex_buffer(0, self.texture_renderer.background_quad_buffer.slice(..)); // slot 0
@@ -367,20 +505,10 @@ impl Renderer {
                 self.texture_renderer.background_quad_index_buffer.slice(..),
                 IndexFormat::Uint16,
             );
-            rpass.draw_indexed(0..self.texture_renderer.index_buffer_size, 0, 0..1);
             // vertex range, instance range
+            rpass.draw_indexed(0..self.texture_renderer.index_buffer_size, 0, 0..1);
         }
         queue.submit(iter::once(encoder.finish()));
-        
-        self.egui_renderer.render(
-            device,
-            queue,
-            &self.sc_desc,
-            &frame.view,
-            gui,
-            clipped_meshes,
-        );
-
     }
 
     pub fn render(
@@ -427,17 +555,16 @@ impl Renderer {
                 rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
                 rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
             }
+
             queue.submit(iter::once(encoder.finish()));
-
-            self.egui_renderer.render(
-                device,
-                queue,
-                &self.sc_desc,
-                &frame.view,
-                gui,
-                clipped_meshes,
-            );
-
         }
+        self.egui_renderer.render(
+            device,
+            queue,
+            &self.sc_desc,
+            &frame.view,
+            gui,
+            clipped_meshes,
+        );
     }
 }

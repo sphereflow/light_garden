@@ -2,7 +2,7 @@ use crate::renderer::Vertex;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
-pub const RENDER_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba32Float;
+pub const RENDER_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba16Float;
 
 pub struct TextureRenderer {
     pub background_quad_buffer: Buffer,

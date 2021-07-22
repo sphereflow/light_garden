@@ -7,20 +7,21 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = "0.26"
+nalgebra = "0.27"
 rayon = "1.5"
-wgpu = { version = "0.8", features = ["webgl"] }
+wgpu = { version = "0.9", features = ["webgl"] }
 bytemuck = "1"
 log = "0.4"
 chrono = "0.4"
 futures-lite = "1.11"
-egui = "0.12"
-epi = "0.12"
-egui_winit_platform = "0.7"
-winit = { version = "0.24", features = ["web-sys"] }
+egui = "0.13"
+epi = "0.13"
+egui_winit_platform = "0.9"
+winit = { version = "0.25", features = ["web-sys"] }
 cgmath = "0.17"
 instant = "0.1"
 image = "0.23"
+half = "1.7"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 wgpu-subscriber = "0.1"
@@ -28,16 +29,17 @@ pollster = "0.2"
 async-executor = "1.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.69"
-wasm-bindgen-futures = "0.4.19"
+wasm-bindgen = "0.2.74"
+wasm-bindgen-futures = "0.4.24"
+getrandom = { version = "0.2", features = ["js"] }
 console_error_panic_hook = "0.1.6"
 console_log = "0.1.2"
-web-sys = "0.3.46"
-js-sys = "0.3.46"
+web-sys = "0.3.50"
+js-sys = "0.3.50"
 
 [dependencies.collision2d]
 git = "https://github.com/sphereflow/collision2d"
 
 # for local development
-[patch."https://github.com/sphereflow/collision2d"]
-collision2d = { path = "../collision2d" }
+# [patch."https://github.com/sphereflow/collision2d"]
+# collision2d = { path = "../collision2d" }

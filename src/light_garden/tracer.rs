@@ -54,16 +54,42 @@ impl Tracer {
         }
         let mut all_line_strips: Vec<(Vec<P2>, Color)> = Vec::new();
         for light in self.lights.iter() {
-            let line_strips = light
-                .get_rays()
-                .par_iter()
-                .map(|ray| {
-                    let mut line_strip = vec![ray.get_origin()];
-                    self.trace_reflective(&mut line_strip, ray, light.get_color(), self.max_bounce);
-                    (line_strip, light.get_color())
-                })
-                .collect::<Vec<(Vec<P2>, Color)>>();
-            all_line_strips.extend(line_strips);
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let line_strips = light
+                    .get_rays()
+                    .par_iter()
+                    .map(|ray| {
+                        let mut line_strip = vec![ray.get_origin()];
+                        self.trace_reflective(
+                            &mut line_strip,
+                            ray,
+                            light.get_color(),
+                            self.max_bounce,
+                        );
+                        (line_strip, light.get_color())
+                    })
+                    .collect::<Vec<(Vec<P2>, Color)>>();
+                all_line_strips.extend(line_strips);
+            };
+            #[cfg(target_arch = "wasm32")]
+            {
+                let line_strips = light
+                    .get_rays()
+                    .iter()
+                    .map(|ray| {
+                        let mut line_strip = vec![ray.get_origin()];
+                        self.trace_reflective(
+                            &mut line_strip,
+                            ray,
+                            light.get_color(),
+                            self.max_bounce,
+                        );
+                        (line_strip, light.get_color())
+                    })
+                    .collect::<Vec<(Vec<P2>, Color)>>();
+                all_line_strips.extend(line_strips);
+            };
         }
         if self.drawing_object.is_some() {
             self.objects.pop();
@@ -122,12 +148,35 @@ impl Tracer {
                     }
                 }
             }
-            let lines: Vec<(P2, Color)> = light
-                .get_rays()
-                .par_chunks(self.chunk_size)
-                .map(|rays| {
-                    let mut lines = Vec::new();
-                    for ray in rays {
+            #[cfg(not(target_arch = "wasm32"))]
+            {
+                let lines: Vec<(P2, Color)> = light
+                    .get_rays()
+                    .par_chunks(self.chunk_size)
+                    .map(|rays| {
+                        let mut lines = Vec::new();
+                        for ray in rays {
+                            self.trace(
+                                &mut lines,
+                                ray,
+                                light.get_color(),
+                                refractive_index,
+                                self.max_bounce,
+                            );
+                        }
+                        lines
+                    })
+                    .collect::<Vec<Vec<(P2, Color)>>>()
+                    .concat();
+                all_lines.extend(lines);
+            };
+            #[cfg(target_arch = "wasm32")]
+            {
+                let lines: Vec<(P2, Color)> = light
+                    .get_rays()
+                    .iter()
+                    .map(|ray| {
+                        let mut lines = Vec::new();
                         self.trace(
                             &mut lines,
                             ray,
@@ -135,12 +184,12 @@ impl Tracer {
                             refractive_index,
                             self.max_bounce,
                         );
-                    }
-                    lines
-                })
-                .collect::<Vec<Vec<(P2, Color)>>>()
-                .concat();
-            all_lines.extend(lines);
+                        lines
+                    })
+                    .collect::<Vec<Vec<(P2, Color)>>>()
+                    .concat();
+                all_lines.extend(lines);
+            };
         }
         if self.drawing_object.is_some() {
             self.objects.pop();

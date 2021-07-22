@@ -1,32 +1,12 @@
 use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
-use epi::{App, RepaintSignal};
+#[cfg(not(target_arch = "wasm32"))]
 use futures_lite::future;
-use std::sync::{Arc, Mutex};
-use winit::event_loop::EventLoopProxy;
 use winit::{
     dpi::LogicalSize,
     event::{self, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
 };
-
-enum CustomEvent {
-    RequestRedraw,
-}
-
-pub struct CustomRepaintSignal {
-    event_loop_proxy: Mutex<EventLoopProxy<CustomEvent>>,
-}
-
-impl RepaintSignal for CustomRepaintSignal {
-    fn request_repaint(&self) {
-        self.event_loop_proxy
-            .lock()
-            .unwrap()
-            .send_event(CustomEvent::RequestRedraw)
-            .ok();
-    }
-}
 
 #[rustfmt::skip]
 #[allow(unused)]
@@ -44,16 +24,9 @@ pub fn cast_slice<T>(data: &[T]) -> &[u8] {
     unsafe { from_raw_parts(data.as_ptr() as *const u8, data.len() * size_of::<T>()) }
 }
 
-#[allow(dead_code)]
-pub enum ShaderStage {
-    Vertex,
-    Fragment,
-    Compute,
-}
-
 struct Setup {
     window: winit::window::Window,
-    event_loop: EventLoop<CustomEvent>,
+    event_loop: EventLoop<()>,
     instance: wgpu::Instance,
     size: winit::dpi::PhysicalSize<u32>,
     surface: wgpu::Surface,
@@ -123,6 +96,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
         "Adapter does not support required features for this example: {:?}",
         required_features - adapter_features
     );
+    println!("Features: {:?}", adapter_features);
 
     let needed_limits = wgpu::Limits::default();
 
@@ -177,9 +151,6 @@ fn start(
     log::info!("Initializing the example...");
     let mut gui = Gui::new(&window, &sc_desc);
     let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, &mut gui.app);
-    let repaint_signal = Arc::new(CustomRepaintSignal {
-        event_loop_proxy: Mutex::new(event_loop.create_proxy()),
-    });
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
@@ -233,24 +204,15 @@ fn start(
                 };
 
                 gui.platform.begin_frame();
-                let mut app_output = epi::backend::AppOutput::default();
-                let mut egui_frame = epi::backend::FrameBuilder {
-                    info: epi::IntegrationInfo {
-                        web_info: None,
-                        cpu_usage: None,
-                        seconds_since_midnight: None,
-                        native_pixels_per_point: None,
-                    },
-                    tex_allocator: &mut renderer.egui_renderer,
-                    output: &mut app_output,
-                    repaint_signal: repaint_signal.clone(),
-                }
-                .build();
-                gui.update(&gui.platform.context(), &mut egui_frame);
+                gui.update(&gui.platform.context());
                 let (_output, clipped_shapes) = gui.platform.end_frame();
                 let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
 
                 renderer.render(&frame.output, &device, &queue, &mut gui, &clipped_meshes); // &clipped_meshes);
+                let screenshot_path = gui.app.screenshot_path.take();
+                if let Some(path) = screenshot_path {
+                    future::block_on(renderer.make_screenshot(path, &device, &queue, gui.app.get_render_to_texture()));
+                }
             }
 
             _ => {}

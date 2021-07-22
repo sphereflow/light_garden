@@ -17,12 +17,13 @@ pub struct Gui {
     pub ui_mode: UiMode,
 }
 
-impl App for Gui {
-    fn name(&self) -> &str {
+impl Gui {
+
+    pub fn name(&self) -> &str {
         "Light Garden"
     }
 
-    fn update(&mut self, ctx: &CtxRef, _frame: &mut epi::Frame<'_>) {
+    pub fn update(&mut self, ctx: &CtxRef) {
         let elapsed = self.last_update_inst.elapsed();
         if self.app.mode == Mode::NoMode
             || self.app.mode == Mode::Selected
@@ -117,6 +118,9 @@ impl Gui {
         }
         if ui.button("S(e)ttings").clicked() {
             self.ui_mode = UiMode::Settings;
+        }
+        if ui.button("Screenshot").clicked() {
+            self.app.screenshot_path = Some("screenshot.jpg".to_owned());
         }
         if ui.button("(G)rid").clicked() {
             self.ui_mode = UiMode::Grid;
