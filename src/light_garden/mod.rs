@@ -18,6 +18,8 @@ pub mod light;
 pub mod object;
 pub mod string_mod;
 pub mod tracer;
+/// the maximum from an objects/lights origin at which a DragEvent can move it
+const MOVE_DIST: Float = 0.2;
 
 pub struct LightGarden {
     pub tracer: Tracer,
@@ -34,6 +36,10 @@ pub struct LightGarden {
     pub string_mods: Vec<StringMod>,
     pub string_mod_ix: usize,
     pub screenshot_path: Option<String>,
+    drag_radius: f64,
+    mouse_is_down: bool,
+    initial_mouse_down: P2,
+    drag_event: Option<DragEvent>,
 }
 
 impl LightGarden {
@@ -56,7 +62,7 @@ impl LightGarden {
         };
         LightGarden {
             tracer: Tracer::new(&canvas_bounds),
-            mouse_pos: Point2::new(0., 0.),
+            mouse_pos: P2::new(0., 0.),
             selected_object: None,
             selected_light: None,
             color_state_descriptor,
@@ -65,10 +71,14 @@ impl LightGarden {
             selected_color: [0.02, 0.03, 0.05, 0.01],
             render_to_texture: false,
             ray_width: 1.0,
-            mode: Mode::NoMode,
+            mode: Mode::Selecting(None),
             string_mods: vec![StringMod::new()],
             string_mod_ix: 0,
             screenshot_path: None,
+            drag_radius: 0.05,
+            mouse_is_down: false,
+            initial_mouse_down: P2::new(0., 0.),
+            drag_event: None,
         }
     }
 
@@ -77,6 +87,20 @@ impl LightGarden {
         self.tracer.grid.snap_to_grid(&mut self.mouse_pos);
         if !self.tracer.canvas_bounds.contains(&self.mouse_pos) {
             return;
+        }
+        if self.mouse_is_down {
+            if let Some(drag_event) = self.drag_event.as_mut() {
+                drag_event.end = self.mouse_pos;
+            } else {
+                let dist = distance(&self.mouse_pos, &self.initial_mouse_down);
+                if dist > self.drag_radius {
+                    self.drag_event = Some(DragEvent {
+                        start: self.initial_mouse_down,
+                        end: self.mouse_pos,
+                    });
+                }
+            }
+            self.mouse_dragged();
         }
         self.update();
     }
@@ -143,16 +167,6 @@ impl LightGarden {
                 )));
             }
 
-            Mode::Move => {
-                let mouse_pos = self.mouse_pos;
-                if let Some(obj) = self.get_selected_object() {
-                    obj.set_origin(mouse_pos);
-                }
-                if let Some(ix) = self.selected_light {
-                    self.tracer.lights[ix].set_origin(mouse_pos);
-                }
-            }
-
             Mode::Rotate => {
                 let mouse_pos = self.mouse_pos;
                 if let Some(obj) = self.get_selected_object() {
@@ -175,7 +189,25 @@ impl LightGarden {
         self.tracer.canvas_bounds
     }
 
-    pub fn mouse_clicked(&mut self) {
+    pub fn mouse_down(&mut self) {
+        self.mouse_is_down = true;
+        self.initial_mouse_down = self.mouse_pos;
+    }
+
+    pub fn mouse_released(&mut self) {
+        self.mouse_is_down = false;
+        if self.drag_event.is_some() {
+            self.mouse_dragged();
+        } else {
+            self.mouse_clicked();
+        }
+        self.drag_event = None;
+        if self.mode == Mode::Moving {
+            self.mode = Mode::Selected;
+        }
+    }
+
+    fn mouse_clicked(&mut self) {
         if !self.tracer.canvas_bounds.contains(&self.mouse_pos) {
             return;
         }
@@ -246,15 +278,13 @@ impl LightGarden {
                     }
                 } else {
                     // there is no currently selected object so performing a logic op is not possible
-                    self.mode = Mode::NoMode;
+                    self.mode = Mode::Selecting(None);
                 }
             }
 
             Mode::Selected => {}
 
-            Mode::Move => {
-                self.mode = Mode::Selected;
-            }
+            Mode::Moving => {}
 
             Mode::Rotate => {
                 self.mode = Mode::Selected;
@@ -267,7 +297,7 @@ impl LightGarden {
                     self.selected_color,
                 )));
                 self.tracer.drawing_light = None;
-                self.mode = Mode::NoMode;
+                self.mode = Mode::Selecting(None);
             }
 
             Mode::DrawSpotLightStart => {
@@ -285,7 +315,7 @@ impl LightGarden {
                     self.selected_color,
                 )));
                 self.tracer.drawing_light = None;
-                self.mode = Mode::NoMode;
+                self.mode = Mode::Selecting(None);
             }
 
             Mode::DrawDirectionalLightStart => {
@@ -303,7 +333,7 @@ impl LightGarden {
                         LineSegment::from_ab(start, self.mouse_pos),
                     )));
                 self.tracer.drawing_light = None;
-                self.mode = Mode::NoMode;
+                self.mode = Mode::Selecting(None);
             }
 
             Mode::DrawMirrorStart => {
@@ -317,7 +347,7 @@ impl LightGarden {
                     .objects
                     .push(Object::new_mirror(start, self.mouse_pos));
                 self.tracer.drawing_object = None;
-                self.mode = Mode::NoMode;
+                self.mode = Mode::Selecting(None);
             }
 
             Mode::DrawCircleStart => {
@@ -333,7 +363,7 @@ impl LightGarden {
                     self.tracer.refractive_index,
                 ));
                 self.tracer.drawing_object = None;
-                self.mode = Mode::NoMode;
+                self.mode = Mode::Selecting(None);
             }
 
             Mode::DrawRectStart => {
@@ -353,10 +383,38 @@ impl LightGarden {
                     self.tracer.refractive_index,
                 ));
                 self.tracer.drawing_object = None;
-                self.mode = Mode::NoMode;
+                self.mode = Mode::Selecting(None);
             }
 
             Mode::StringMod => {}
+        }
+    }
+
+    fn mouse_dragged(&mut self) {
+        if let Some(drag_event) = self.drag_event {
+            match self.mode {
+                Mode::Selected => {
+                    if let Some(obj) = self.get_selected_object() {
+                        if distance(&obj.get_origin(), &drag_event.start) < MOVE_DIST {
+                            self.mode = Mode::Moving;
+                        }
+                    }
+                    if let Some(light) = self.get_selected_light() {
+                        if distance(&light.get_origin(), &drag_event.start) < MOVE_DIST {
+                            self.mode = Mode::Moving;
+                        }
+                    }
+                }
+                Mode::Moving => {
+                    if let Some(obj) = self.get_selected_object() {
+                        obj.set_origin(drag_event.end);
+                    }
+                    if let Some(light) = self.get_selected_light() {
+                        light.set_origin(drag_event.end);
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -403,7 +461,9 @@ impl LightGarden {
         self.selected_light = None;
         self.selected_object = None;
         self.tracer.drawing_object = None;
-        self.mode = Mode::NoMode;
+        if self.mode == Mode::Selected {
+            self.mode = Mode::Selecting(None);
+        }
     }
 
     pub fn copy_selected(&mut self) {
@@ -465,7 +525,7 @@ pub enum Mode {
     NoMode,
     Selecting(Option<LogicOp>),
     Selected,
-    Move,
+    Moving,
     Rotate,
     DrawMirrorStart,
     DrawMirrorEnd { start: P2 },
@@ -479,4 +539,10 @@ pub enum Mode {
     DrawDirectionalLightStart,
     DrawDirectionalLightEnd { start: P2 },
     StringMod,
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub struct DragEvent {
+    start: P2,
+    end: P2,
 }

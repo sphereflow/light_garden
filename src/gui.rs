@@ -18,7 +18,6 @@ pub struct Gui {
 }
 
 impl Gui {
-
     pub fn name(&self) -> &str {
         "Light Garden"
     }
@@ -27,6 +26,7 @@ impl Gui {
         let elapsed = self.last_update_inst.elapsed();
         if self.app.mode == Mode::NoMode
             || self.app.mode == Mode::Selected
+            || self.app.mode == Mode::Selecting(None)
             || self.app.mode == Mode::StringMod
         {
             let window = Window::new("Light Garden");
@@ -41,8 +41,16 @@ impl Gui {
                         ));
                     }
 
-                    if self.app.mode == Mode::StringMod {
-                        self.ui_mode = UiMode::StringMod;
+                    self.display_mode(ui);
+
+                    match self.app.mode {
+                        Mode::StringMod => {
+                            self.ui_mode = UiMode::StringMod;
+                        }
+                        Mode::Selected => {
+                            self.ui_mode = UiMode::Selected;
+                        }
+                        _ => {}
                     }
 
                     match self.ui_mode {
@@ -73,6 +81,13 @@ impl Gui {
                         "Average Trace Time: {}",
                         self.app.tracer.get_trace_time()
                     ));
+                    if ui.ui_contains_pointer() && self.ui_mode == UiMode::Main {
+                        self.app.mode = Mode::NoMode;
+                    } else {
+                        if self.ui_mode == UiMode::Main {
+                            self.app.mode = Mode::Selecting(None);
+                        }
+                    }
                 });
         }
 
@@ -112,10 +127,6 @@ impl Gui {
         if ui.button("(A)dd ...").clicked() {
             self.ui_mode = UiMode::Add;
         }
-        if ui.button("(S)elect").clicked() {
-            self.ui_mode = UiMode::Selected;
-            self.app.mode = Mode::Selecting(None);
-        }
         if ui.button("S(e)ttings").clicked() {
             self.ui_mode = UiMode::Settings;
         }
@@ -132,6 +143,11 @@ impl Gui {
         if ui.button("(Q)it").clicked() {
             self.ui_mode = UiMode::Exiting;
         }
+    }
+
+    fn display_mode(&mut self, ui: &mut Ui) {
+        ui.label(format!("App mode: {:?}", self.app.mode));
+        ui.label(format!("Ui mode: {:?}", self.ui_mode));
     }
 
     fn selected(&mut self, ui: &mut Ui) {
@@ -160,9 +176,6 @@ impl Gui {
 
         if let Some(light) = self.app.get_selected_light() {
             Gui::edit_light(light, ui);
-            if ui.button("(M)ove Light").clicked() {
-                self.app.mode = Mode::Move;
-            }
         } else {
             let ac = self.app.selected_color;
             let mut color =
@@ -213,9 +226,6 @@ impl Gui {
 
     fn edit(&mut self, ui: &mut Ui) {
         if self.app.get_selected_object().is_some() {
-            if ui.button("(M)ove Obj").clicked() {
-                self.app.mode = Mode::Move;
-            }
             if ui.button("(R)otate").clicked() {
                 self.app.mode = Mode::Rotate;
             }
@@ -292,18 +302,20 @@ impl Gui {
     fn edit_light(light: &mut Light, ui: &mut Ui) {
         let mut update_light = false;
         match light {
-            Light::PointLight(_point) => { /* no user interface elements to add */ }
-            Light::SpotLight(spot) => {
+            Light::PointLight(ref mut _point) => { /* no user interface elements to add */ }
+            Light::SpotLight(ref mut spot) => {
                 // spot angle
+                // conversion radian -> degrees
                 let mut spot_angle = spot.spot_angle * 180. / PI;
                 let old_spot_angle = spot_angle;
                 ui.add(Slider::new::<f64>(&mut spot_angle, 0.0..=360.0).text("Spot Angle"));
-                if (spot_angle - old_spot_angle).abs() < Float::EPSILON {
+                if (spot_angle - old_spot_angle).abs() > Float::EPSILON {
+                    // conversion degrees -> radian
                     spot.spot_angle = spot_angle * PI / 180.;
                     update_light = true;
                 }
             }
-            Light::DirectionalLight(_direction) => {}
+            Light::DirectionalLight(ref mut _direction) => {}
         }
 
         // num rays
@@ -652,10 +664,6 @@ impl Gui {
                             UiMode::Exiting => {}
                         },
                         (Some(Key::A), UiMode::Main) => self.ui_mode = UiMode::Add,
-                        (Some(Key::S), UiMode::Main) => {
-                            self.ui_mode = UiMode::Selected;
-                            self.app.mode = Mode::Selecting(None)
-                        }
                         (Some(Key::E), UiMode::Main) => self.ui_mode = UiMode::Settings,
                         (Some(Key::R), UiMode::Main) => {
                             self.app.mode = Mode::StringMod;
@@ -672,7 +680,6 @@ impl Gui {
                         (Some(Key::C), UiMode::Add) => self.app.mode = Mode::DrawCircleStart,
                         (Some(Key::M), UiMode::Add) => self.app.mode = Mode::DrawMirrorStart,
 
-                        (Some(Key::M), UiMode::Selected) => self.app.mode = Mode::Move,
                         (Some(Key::R), UiMode::Selected) => self.app.mode = Mode::Rotate,
                         (Some(Key::A), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::And))
@@ -713,11 +720,18 @@ impl Gui {
                 ));
             }
             WindowEvent::MouseInput {
+                state: event::ElementState::Pressed,
+                button: event::MouseButton::Left,
+                ..
+            } => {
+                self.app.mouse_down();
+            }
+            WindowEvent::MouseInput {
                 state: event::ElementState::Released,
                 button: event::MouseButton::Left,
                 ..
             } => {
-                self.app.mouse_clicked();
+                self.app.mouse_released();
             }
             WindowEvent::MouseInput {
                 state: event::ElementState::Released,
