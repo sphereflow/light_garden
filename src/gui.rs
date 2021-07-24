@@ -620,6 +620,9 @@ impl Gui {
     }
 
     pub fn string_mod_selector(&mut self, ui: &mut Ui) {
+        if ui.button("Screenshot").clicked() {
+            self.app.screenshot_path = Some("screenshot.jpg".to_owned());
+        }
         ui.add(
             DragValue::new::<usize>(&mut self.app.string_mod_ix)
                 .clamp_range(0.0..=self.app.string_mods.len() as f32 - 0.9),
