@@ -47,7 +47,7 @@ impl Gui {
                         Mode::StringMod => {
                             self.ui_mode = UiMode::StringMod;
                         }
-                        Mode::Selected => {
+                        Mode::Selected | Mode::EditObject => {
                             self.ui_mode = UiMode::Selected;
                         }
                         _ => {}
@@ -153,6 +153,10 @@ impl Gui {
     fn selected(&mut self, ui: &mut Ui) {
         if let Some(obj) = self.app.get_selected_object() {
             Gui::edit_object(obj, ui);
+        }
+
+        if ui.button("(E)dit").clicked() {
+            self.app.mode = Mode::EditObject;
         }
 
         if ui.button("(C)opy").clicked() {

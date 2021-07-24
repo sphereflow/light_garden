@@ -290,6 +290,8 @@ impl LightGarden {
                 self.mode = Mode::Selected;
             }
 
+            Mode::EditObject => {}
+
             Mode::DrawPointLight => {
                 self.tracer.lights.push(Light::PointLight(PointLight::new(
                     self.mouse_pos,
@@ -413,6 +415,25 @@ impl LightGarden {
                         light.set_origin(drag_event.end);
                     }
                 }
+                Mode::EditObject => {
+                    if let Some(obj) = self.get_selected_object() {
+                        match obj {
+                            Object::CurvedMirror(cm) => {
+                                let mut min_distance = Float::MAX;
+                                let mut min_ix = 0;
+                                for (ix, point) in cm.cubic.points.iter().enumerate() {
+                                    let dist = distance(point, &drag_event.end);
+                                    if dist < min_distance {
+                                        min_distance = dist;
+                                        min_ix = ix;
+                                    }
+                                }
+                                cm.cubic.points[min_ix] = drag_event.end;
+                            }
+                            _ => {}
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -461,8 +482,11 @@ impl LightGarden {
         self.selected_light = None;
         self.selected_object = None;
         self.tracer.drawing_object = None;
-        if self.mode == Mode::Selected {
-            self.mode = Mode::Selecting(None);
+        match self.mode {
+            Mode::Selected | Mode::EditObject => {
+                self.mode = Mode::Selecting(None);
+            }
+            _ => {}
         }
     }
 
@@ -527,6 +551,7 @@ pub enum Mode {
     Selected,
     Moving,
     Rotate,
+    EditObject,
     DrawMirrorStart,
     DrawMirrorEnd { start: P2 },
     DrawCircleStart,
