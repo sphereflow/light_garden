@@ -9,8 +9,8 @@
 
 ## TODO
 
--[] ellipses
--[] convex polygons
+- [] ellipses
+- [] convex polygons
 
 ## Thanks
 
