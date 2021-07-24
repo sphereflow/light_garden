@@ -3,6 +3,7 @@
 ## Screenshots
 
 ![](https://github.com/sphereflow/light_garden/blob/master/images/screenshot1.jpg)
+![](https://github.com/sphereflow/light_garden/blob/master/images/screenshot2.jpg)
 ![](https://github.com/sphereflow/light_garden/blob/master/images/wgpu.jpg)
 ![](https://github.com/sphereflow/light_garden/blob/master/images/wgpu_cube.jpg)
 ![](https://github.com/sphereflow/light_garden/blob/master/images/wgpu_circle.jpg)
