@@ -14,32 +14,33 @@ impl Object {
     pub fn new_mirror(a: P2, b: P2) -> Self {
         Object::StraightMirror(StraightMirror::new(LineSegment::from_ab(a, b)))
     }
-    pub fn new_circle(origin: P2, radius: Float, refractive_index: Float) -> Self {
-        Object::Circle(Circle { origin, radius }, Material { refractive_index })
+    pub fn new_circle(origin: P2, radius: Float) -> Self {
+        Object::Circle(Circle { origin, radius }, Material::default())
     }
-    pub fn new_rect(origin: P2, width: Float, height: Float, refractive_index: Float) -> Self {
+    pub fn new_rect(origin: P2, width: Float, height: Float) -> Self {
         Object::Rect(
             Rect::new(origin, Rot2::identity(), width, height),
-            Material { refractive_index },
+            Material::default(),
         )
     }
-    pub fn new_lens(origin: P2, radius: Float, distance: Float, refractive_index: Float) -> Self {
-        Object::Lens(
-            Lens::new(origin, radius, distance),
-            Material { refractive_index },
-        )
+    pub fn new_lens(origin: P2, radius: Float, distance: Float) -> Self {
+        Object::Lens(Lens::new(origin, radius, distance), Material::default())
     }
-    pub fn new_geo(geo: Geo, refractive_index: Float) -> Self {
-        Object::Geo(geo, Material { refractive_index })
+    pub fn new_convex_polygon(points: &Vec<P2>) -> Self {
+        Object::ConvexPolygon(ConvexPolygon::new_convex_hull(points), Material::default())
     }
-    pub fn get_material(&self) -> Material {
+    pub fn new_geo(geo: Geo) -> Self {
+        Object::Geo(geo, Material::default())
+    }
+    pub fn get_material(&self) -> Option<Material> {
         match self {
-            Object::StraightMirror(_) => Material::default(),
-            Object::CurvedMirror(_) => Material::default(),
-            Object::Circle(_, m) => *m,
-            Object::Rect(_, m) => *m,
-            Object::Lens(_, m) => *m,
-            Object::Geo(_, m) => *m,
+            Object::StraightMirror(_) => None,
+            Object::CurvedMirror(_) => None,
+            Object::Circle(_, m) => Some(*m),
+            Object::Rect(_, m) => Some(*m),
+            Object::Lens(_, m) => Some(*m),
+            Object::ConvexPolygon(_, m) => Some(*m),
+            Object::Geo(_, m) => Some(*m),
         }
     }
     pub fn material_mut(&mut self) -> Option<&mut Material> {
@@ -157,12 +158,13 @@ impl HasGeometry for Object {
             Object::Circle(c, _material) => Geo::GeoCircle(*c),
             Object::Rect(r, _material) => Geo::GeoRect(*r),
             Object::Lens(l, _) => Geo::GeoLogic(l.get_logic()),
+            Object::ConvexPolygon(cp, _) => Geo::GeoConvexPolygon(cp.clone()),
             Object::Geo(g, _) => g.clone(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StraightMirror {
     pub line_segment: LineSegment,
 }
@@ -192,7 +194,7 @@ impl HasGeometry for StraightMirror {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CurvedMirror {
     pub cubic: CubicBezier,
 }
@@ -222,7 +224,7 @@ impl HasGeometry for CurvedMirror {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Lens {
     pub l: Logic,
 }
@@ -271,7 +273,7 @@ impl HasGeometry for Lens {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Material {
     pub refractive_index: Float,
 }
@@ -279,7 +281,7 @@ pub struct Material {
 impl Default for Material {
     fn default() -> Self {
         Material {
-            refractive_index: 1.,
+            refractive_index: 1.2,
         }
     }
 }

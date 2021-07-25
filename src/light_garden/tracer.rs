@@ -6,7 +6,6 @@ pub struct Tracer {
     pub drawing_object: Option<Object>,
     pub drawing_light: Option<Light>,
     pub max_bounce: u32,
-    pub refractive_index: Float,
     pub chunk_size: usize,
     pub cutoff_color: Color,
     pub grid: Grid,
@@ -17,7 +16,7 @@ pub struct Tracer {
 impl Tracer {
     pub fn new(canvas_bounds: &Rect) -> Self {
         let light = Light::PointLight(PointLight::new(Point2::new(-0.1, 0.1), 10000, [0.01; 4]));
-        let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8, 5.);
+        let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8);
         let mut cubic1 = CubicBezier::new_sample();
         cubic1.scale(0.5, 0.5);
         let curved_mirror1 = Object::CurvedMirror(CurvedMirror { cubic: cubic1 });
@@ -31,7 +30,6 @@ impl Tracer {
             drawing_light: None,
             max_bounce: 5,
             cutoff_color: [0.001; 4],
-            refractive_index: 2.,
             chunk_size: 100,
             grid: Grid::new(&canvas_bounds),
             canvas_bounds: *canvas_bounds,

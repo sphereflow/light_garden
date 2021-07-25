@@ -112,23 +112,15 @@ impl LightGarden {
             }
 
             Mode::DrawCircleEnd { start } => {
-                self.tracer.drawing_object = Some(Object::new_circle(
-                    start,
-                    distance(&start, &self.mouse_pos),
-                    self.tracer.refractive_index,
-                ));
+                self.tracer.drawing_object =
+                    Some(Object::new_circle(start, distance(&start, &self.mouse_pos)));
             }
 
             Mode::DrawRectEnd { start } => {
                 let vdiff_t2 = 2. * (self.mouse_pos - start);
                 let width = vdiff_t2[0].abs();
                 let height = vdiff_t2[1].abs();
-                self.tracer.drawing_object = Some(Object::new_rect(
-                    start,
-                    width,
-                    height,
-                    self.tracer.refractive_index,
-                ));
+                self.tracer.drawing_object = Some(Object::new_rect(start, width, height));
             }
 
             Mode::DrawPointLight => {
@@ -264,12 +256,7 @@ impl LightGarden {
                                 LogicOp::Or => geo_a | geo_b,
                                 LogicOp::AndNot => geo_a.and_not(geo_b),
                             };
-                            self.tracer.objects[current_ix.min(click_ix)] = Object::new_geo(
-                                geo,
-                                self.tracer.objects[current_ix]
-                                    .get_material()
-                                    .refractive_index,
-                            );
+                            self.tracer.objects[current_ix.min(click_ix)] = Object::new_geo(geo);
                             // current_ix != click_ix
                             self.tracer.objects.remove(current_ix.max(click_ix));
                             self.mode = Mode::Selected;
@@ -359,11 +346,9 @@ impl LightGarden {
             }
 
             Mode::DrawCircleEnd { start } => {
-                self.tracer.objects.push(Object::new_circle(
-                    start,
-                    distance(&start, &self.mouse_pos),
-                    self.tracer.refractive_index,
-                ));
+                self.tracer
+                    .objects
+                    .push(Object::new_circle(start, distance(&start, &self.mouse_pos)));
                 self.tracer.drawing_object = None;
                 self.mode = Mode::Selecting(None);
             }
@@ -378,14 +363,21 @@ impl LightGarden {
                 let vdiff_t2 = 2. * (self.mouse_pos - start);
                 let width = vdiff_t2[0].abs();
                 let height = vdiff_t2[1].abs();
-                self.tracer.objects.push(Object::new_rect(
-                    start,
-                    width,
-                    height,
-                    self.tracer.refractive_index,
-                ));
+                self.tracer
+                    .objects
+                    .push(Object::new_rect(start, width, height));
                 self.tracer.drawing_object = None;
                 self.mode = Mode::Selecting(None);
+            }
+
+            Mode::DrawConvexPolygon { ref mut points } => {
+                points.push(self.mouse_pos);
+                if points.len() > 2 {
+                    self.tracer.drawing_object = Some(Object::ConvexPolygon(
+                        ConvexPolygon::new_convex_hull(&points),
+                        Material::default(),
+                    ));
+                }
             }
 
             Mode::StringMod => {}
