@@ -75,10 +75,8 @@ impl Grid {
     }
 
     pub fn set_dist(&mut self, dist: f64, bounds: &Rect) {
-        if (self.dist - dist).abs() < f64::EPSILON {
-            self.dist = dist;
-            self.update_canvas_bounds(bounds);
-        }
+        self.dist = dist;
+        self.update_canvas_bounds(bounds);
     }
 
     pub fn get_color(&self) -> Color {
