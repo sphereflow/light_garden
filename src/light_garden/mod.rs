@@ -474,12 +474,8 @@ impl LightGarden {
         self.selected_light = None;
         self.selected_object = None;
         self.tracer.drawing_object = None;
-        match self.mode {
-            Mode::Selected | Mode::EditObject => {
-                self.mode = Mode::Selecting(None);
-            }
-            _ => {}
-        }
+        self.tracer.drawing_light = None;
+        self.mode = Mode::Selecting(None);
     }
 
     pub fn copy_selected(&mut self) {

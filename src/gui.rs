@@ -13,6 +13,7 @@ pub struct Gui {
     pub scale_factor: f32,
     last_update_inst: Instant,
     last_cursor: Option<Pos2>,
+    gui_contains_pointer: bool,
     pub app: LightGarden,
     pub ui_mode: UiMode,
 }
@@ -24,11 +25,18 @@ impl Gui {
 
     pub fn update(&mut self, ctx: &CtxRef) {
         let elapsed = self.last_update_inst.elapsed();
-        if self.app.mode == Mode::NoMode
-            || self.app.mode == Mode::Selected
-            || self.app.mode == Mode::Selecting(None)
-            || self.app.mode == Mode::StringMod
-        {
+        let bdisplay_ui = match self.app.mode {
+            Mode::NoMode
+            | Mode::Selected
+            | Mode::Selecting(None)
+            | Mode::DrawConvexPolygon { .. }
+            | Mode::StringMod => true,
+            _ => false,
+        };
+        if !bdisplay_ui {
+            self.gui_contains_pointer = false;
+        }
+        if bdisplay_ui {
             let window = Window::new("Light Garden");
             window
                 .default_size(Vec2::new(300.0, 100.0))
@@ -81,13 +89,7 @@ impl Gui {
                         "Average Trace Time: {}",
                         self.app.tracer.get_trace_time()
                     ));
-                    if ui.ui_contains_pointer() && self.ui_mode == UiMode::Main {
-                        self.app.mode = Mode::NoMode;
-                    } else {
-                        if self.ui_mode == UiMode::Main {
-                            self.app.mode = Mode::Selecting(None);
-                        }
-                    }
+                    self.gui_contains_pointer = ui.ui_contains_pointer();
                 });
         }
 
@@ -116,6 +118,7 @@ impl Gui {
             scale_factor: winit_window.scale_factor() as f32,
             last_update_inst,
             last_cursor: None,
+            gui_contains_pointer: false,
             app,
             ui_mode: UiMode::new(),
         }
@@ -657,7 +660,10 @@ impl Gui {
                     match (input.virtual_keycode, self.ui_mode) {
                         (Some(Key::Escape), ui_mode) => match ui_mode {
                             UiMode::Main => {}
-                            UiMode::Add => self.ui_mode = UiMode::Main,
+                            UiMode::Add => {
+                                self.ui_mode = UiMode::Main;
+                                self.app.mode = Mode::Selecting(None);
+                            }
                             UiMode::Selected => {
                                 self.app.deselect();
                                 self.ui_mode = UiMode::Main;
@@ -731,14 +737,18 @@ impl Gui {
                 button: event::MouseButton::Left,
                 ..
             } => {
-                self.app.mouse_down();
+                if !self.gui_contains_pointer {
+                    self.app.mouse_down();
+                }
             }
             WindowEvent::MouseInput {
                 state: event::ElementState::Released,
                 button: event::MouseButton::Left,
                 ..
             } => {
-                self.app.mouse_released();
+                if !self.gui_contains_pointer {
+                    self.app.mouse_released();
+                }
             }
             WindowEvent::MouseInput {
                 state: event::ElementState::Released,
