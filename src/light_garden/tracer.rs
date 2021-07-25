@@ -270,7 +270,7 @@ impl Tracer {
                 }
 
                 if let Some((intersection, normal, index)) = nearest_target {
-                    let obj = self.objects[index].clone();
+                    let obj = &self.objects[index];
                     match obj {
                         Object::StraightMirror(_) | Object::CurvedMirror(_) => {
                             rays.push((ray.get_origin(), *color));
@@ -285,43 +285,47 @@ impl Tracer {
                         Object::Rect(_, material)
                         | Object::Circle(_, material)
                         | Object::Lens(_, material)
+                        | Object::ConvexPolygon(_, material)
                         | Object::Geo(_, material) => {
-                            let mut updated_refractive_index = 1.;
-                            let result;
+                            // get the refracted rays refractive_index
+                            let mut refracted_refractive_index = 1.; // air
                             if obj.contains(&ray.get_origin()) {
-                                result = ray.refract(
-                                    &intersection,
-                                    &normal,
-                                    material.refractive_index,
-                                    *refractive_index,
-                                );
+                                for (ix, o) in self.objects.iter().enumerate() {
+                                    if ix != index && o.contains(&intersection) {
+                                        if let Some(material) = o.get_material() {
+                                            refracted_refractive_index = material.refractive_index;
+                                            break;
+                                        }
+                                    }
+                                }
                             } else {
-                                updated_refractive_index = material.refractive_index;
-                                result = ray.refract(
-                                    &intersection,
-                                    &normal,
-                                    *refractive_index,
-                                    material.refractive_index,
-                                );
+                                refracted_refractive_index = material.refractive_index;
                             }
+
+                            let result = ray.refract(
+                                &intersection,
+                                &normal,
+                                *refractive_index,
+                                refracted_refractive_index,
+                            );
                             let (reflected, orefracted, reflectance) = result;
                             rays.push((ray.get_origin(), *color));
                             rays.push((reflected.get_origin(), *color));
 
                             let refl = reflectance as f32;
                             let omrefl = 1. - refl;
-                            let color1 =
+                            let reflected_color =
                                 [color[0] * refl, color[1] * refl, color[2] * refl, color[3]];
-                            let color2 = [
+                            let refracted_color = [
                                 color[0] * omrefl,
                                 color[1] * omrefl,
                                 color[2] * omrefl,
                                 color[3],
                             ];
-                            back_buffer.push((reflected, color1, *refractive_index));
+                            back_buffer.push((reflected, reflected_color, *refractive_index));
                             // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
                             if let Some(refracted) = orefracted {
-                                back_buffer.push((refracted, color2, updated_refractive_index));
+                                back_buffer.push((refracted, refracted_color, refracted_refractive_index));
                             }
                         }
                     }
