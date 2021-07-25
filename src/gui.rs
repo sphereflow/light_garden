@@ -420,54 +420,46 @@ impl Gui {
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
             let selected = &mut blend_state.color.src_factor;
-            let old_selected = *selected;
-            ComboBox::from_label("ColorSrc")
+            selected_changed |= ComboBox::from_label("ColorSrc")
                 .selected_text(format!("{:?}", selected))
                 .show_ui(ui, |ui| {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                });
-            selected_changed = old_selected != *selected;
+                }).changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
             let selected = &mut blend_state.color.dst_factor;
-            let old_selected = *selected;
-            ComboBox::from_label("ColorDst")
+            selected_changed |= ComboBox::from_label("ColorDst")
                 .selected_text(format!("{:?}", selected))
                 .show_ui(ui, |ui| {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                });
-            selected_changed |= old_selected != *selected;
+                }).changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
             let selected = &mut blend_state.alpha.src_factor;
-            let old_selected = *selected;
-            ComboBox::from_label("AlphaSrc")
+            selected_changed |= ComboBox::from_label("AlphaSrc")
                 .selected_text(format!("{:?}", selected))
                 .show_ui(ui, |ui| {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                });
-            selected_changed |= old_selected != *selected;
+                }).changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
             let selected = &mut blend_state.alpha.dst_factor;
-            let old_selected = *selected;
-            ComboBox::from_label("AlphaDst")
+            selected_changed |= ComboBox::from_label("AlphaDst")
                 .selected_text(format!("{:?}", selected))
                 .show_ui(ui, |ui| {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                });
-            selected_changed |= old_selected != *selected;
+                }).changed();
         }
 
         let blend_ops: &[BlendOperation] = &[
@@ -480,28 +472,24 @@ impl Gui {
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
             let selected = &mut blend_state.color.operation;
-            let old_selected = *selected;
-            ComboBox::from_label("BlendOpColor")
+            selected_changed |= ComboBox::from_label("BlendOpColor")
                 .selected_text(format!("{:?}", selected))
                 .show_ui(ui, |ui| {
                     blend_ops.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                });
-            selected_changed |= old_selected != *selected;
+                }).changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
             let selected = &mut blend_state.alpha.operation;
-            let old_selected = *selected;
-            ComboBox::from_label("BlendOpAlpha")
+            selected_changed |= ComboBox::from_label("BlendOpAlpha")
                 .selected_text(format!("{:?}", selected))
                 .show_ui(ui, |ui| {
                     blend_ops.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                });
-            selected_changed |= old_selected != *selected;
+                }).changed();
         }
 
         self.app.recreate_pipeline |= selected_changed;
@@ -526,11 +514,15 @@ impl Gui {
 
     pub fn grid_size(&mut self, ui: &mut Ui) {
         let mut grid_size = self.app.tracer.grid.get_dist();
-        ui.add(Slider::new::<f64>(&mut grid_size, 0.01..=0.1).text("Grid size"));
-        self.app
-            .tracer
-            .grid
-            .set_dist(grid_size, &self.app.get_canvas_bounds());
+        if ui
+            .add(Slider::new::<f64>(&mut grid_size, 0.01..=0.1).text("Grid size"))
+            .changed()
+        {
+            self.app
+                .tracer
+                .grid
+                .set_dist(grid_size, &self.app.get_canvas_bounds());
+        }
     }
 
     pub fn string_mod_init_curve(string_mod: &mut StringMod, ui: &mut Ui) {
