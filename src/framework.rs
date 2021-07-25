@@ -209,8 +209,7 @@ fn start(
                 let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
 
                 renderer.render(&frame.output, &device, &queue, &mut gui, &clipped_meshes); // &clipped_meshes);
-                let screenshot_path = gui.app.screenshot_path.take();
-                if let Some(path) = screenshot_path {
+                if let Some(path) = gui.app.screenshot_path.take(){
                     future::block_on(renderer.make_screenshot(path, &device, &queue, gui.app.get_render_to_texture()));
                 }
             }
