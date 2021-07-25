@@ -24,7 +24,6 @@ impl Gui {
     }
 
     pub fn update(&mut self, ctx: &CtxRef) {
-        let elapsed = self.last_update_inst.elapsed();
         let bdisplay_ui = match self.app.mode {
             Mode::NoMode
             | Mode::Selected
@@ -87,9 +86,10 @@ impl Gui {
                         UiMode::Exiting => {}
                     }
 
-                    ui.label(format!("Frametime: {:?}", elapsed));
+                    let elapsed = self.last_update_inst.elapsed();
+                    ui.label(format!("Frametime: {:.2?}", elapsed));
                     ui.label(format!(
-                        "Average Trace Time: {}",
+                        "Average Trace Time: {:.2}",
                         self.app.tracer.get_trace_time()
                     ));
                     self.gui_contains_pointer = ui.ui_contains_pointer();
@@ -426,7 +426,8 @@ impl Gui {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                }).changed();
+                })
+                .changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -437,7 +438,8 @@ impl Gui {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                }).changed();
+                })
+                .changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -448,7 +450,8 @@ impl Gui {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                }).changed();
+                })
+                .changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -459,7 +462,8 @@ impl Gui {
                     blend_factors.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                }).changed();
+                })
+                .changed();
         }
 
         let blend_ops: &[BlendOperation] = &[
@@ -478,7 +482,8 @@ impl Gui {
                     blend_ops.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                }).changed();
+                })
+                .changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -489,7 +494,8 @@ impl Gui {
                     blend_ops.iter().for_each(|bf| {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
-                }).changed();
+                })
+                .changed();
         }
 
         self.app.recreate_pipeline |= selected_changed;
