@@ -37,6 +37,18 @@ impl Tracer {
         }
     }
 
+    pub fn add_drawing_object(&mut self) {
+        if let Some(obj) = self.drawing_object.take() {
+            self.objects.push(obj);
+        }
+    }
+
+    pub fn add_drawing_light(&mut self) {
+        if let Some(light) = self.drawing_light.take() {
+            self.lights.push(light);
+        }
+    }
+
     pub fn resize(&mut self, bounds: &Rect) {
         self.canvas_bounds = *bounds;
         self.grid.update_canvas_bounds(bounds);

@@ -532,7 +532,7 @@ impl LightGarden {
     }
 }
 
-#[derive(PartialEq, Debug, Clone, Copy)]
+#[derive(PartialEq, Debug, Clone)]
 pub enum Mode {
     NoMode,
     Selecting(Option<LogicOp>),
@@ -546,6 +546,7 @@ pub enum Mode {
     DrawCircleEnd { start: P2 },
     DrawRectStart,
     DrawRectEnd { start: P2 },
+    DrawConvexPolygon { points: Vec<P2> },
     DrawPointLight,
     DrawSpotLightStart,
     DrawSpotLightEnd { origin: P2 },

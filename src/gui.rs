@@ -58,6 +58,9 @@ impl Gui {
                         Mode::Selected | Mode::EditObject => {
                             self.ui_mode = UiMode::Selected;
                         }
+                        Mode::DrawConvexPolygon { .. } => {
+                            self.draw_convex_polygon(ui);
+                        }
                         _ => {}
                     }
 
@@ -228,6 +231,9 @@ impl Gui {
             if ui.button("Add (M)irror").clicked() {
                 self.app.mode = Mode::DrawMirrorStart;
             }
+            if ui.button("Add Con(v)ex Polygon").clicked() {
+                self.app.mode = Mode::DrawConvexPolygon { points: Vec::new() };
+            }
         }
     }
 
@@ -304,6 +310,14 @@ impl Gui {
 
     fn get_current_string_mod(&mut self) -> &mut StringMod {
         &mut self.app.string_mods[self.app.string_mod_ix]
+    }
+
+    fn draw_convex_polygon(&mut self, ui: &mut Ui) {
+        if ui.button("Finish").clicked() {
+            self.app.mode = Mode::NoMode;
+            self.ui_mode = UiMode::Add;
+            self.app.tracer.add_drawing_object();
+        }
     }
 
     fn edit_light(light: &mut Light, ui: &mut Ui) {
@@ -692,6 +706,9 @@ impl Gui {
                         (Some(Key::R), UiMode::Add) => self.app.mode = Mode::DrawRectStart,
                         (Some(Key::C), UiMode::Add) => self.app.mode = Mode::DrawCircleStart,
                         (Some(Key::M), UiMode::Add) => self.app.mode = Mode::DrawMirrorStart,
+                        (Some(Key::V), UiMode::Add) => {
+                            self.app.mode = Mode::DrawConvexPolygon { points: Vec::new() }
+                        }
 
                         (Some(Key::R), UiMode::Selected) => self.app.mode = Mode::Rotate,
                         (Some(Key::A), UiMode::Selected) => {

@@ -1,12 +1,13 @@
 use collision2d::geo::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Object {
     StraightMirror(StraightMirror),
     CurvedMirror(CurvedMirror),
     Circle(Circle, Material),
     Rect(Rect, Material),
     Lens(Lens, Material),
+    ConvexPolygon(ConvexPolygon, Material),
     Geo(Geo, Material),
 }
 
@@ -50,6 +51,7 @@ impl Object {
             Object::Circle(_, m) => Some(m),
             Object::Rect(_, m) => Some(m),
             Object::Lens(_, m) => Some(m),
+            Object::ConvexPolygon(_, m) => Some(m),
             Object::Geo(_, m) => Some(m),
         }
     }
@@ -63,6 +65,7 @@ impl HasOrigin for Object {
             Object::Circle(c, _) => c.get_origin(),
             Object::Rect(r, _) => r.get_origin(),
             Object::Lens(l, _) => l.l.get_origin(),
+            Object::ConvexPolygon(cp, _) => cp.get_origin(),
             Object::Geo(g, _) => g.get_origin(),
         }
     }
@@ -73,6 +76,7 @@ impl HasOrigin for Object {
             Object::Circle(c, _) => c.set_origin(origin),
             Object::Rect(r, _) => r.set_origin(origin),
             Object::Lens(l, _) => l.l.set_origin(origin),
+            Object::ConvexPolygon(cp, _) => cp.set_origin(origin),
             Object::Geo(g, _) => g.set_origin(origin),
         }
     }
@@ -86,6 +90,7 @@ impl Rotate for Object {
             Object::Circle(c, _) => c.get_rotation(),
             Object::Rect(r, _) => r.get_rotation(),
             Object::Lens(l, _) => l.l.get_rotation(),
+            Object::ConvexPolygon(cp, _) => cp.get_rotation(),
             Object::Geo(g, _) => g.get_rotation(),
         }
     }
@@ -96,6 +101,7 @@ impl Rotate for Object {
             Object::Circle(c, _) => c.set_rotation(rotation),
             Object::Rect(r, _) => r.set_rotation(rotation),
             Object::Lens(l, _) => l.l.set_rotation(rotation),
+            Object::ConvexPolygon(cp, _) => cp.set_rotation(rotation),
             Object::Geo(g, _) => g.set_rotation(rotation),
         }
     }
@@ -109,6 +115,7 @@ impl Mirror for Object {
             Object::Circle(c, material) => Object::Circle(c.mirror_x(), *material),
             Object::Rect(r, material) => Object::Rect(r.mirror_x(), *material),
             Object::Lens(l, material) => Object::Lens(l.mirror_x(), *material),
+            Object::ConvexPolygon(cp, material) => Object::ConvexPolygon(cp.mirror_x(), *material),
             Object::Geo(g, material) => Object::Geo(g.mirror_x(), *material),
         }
     }
@@ -119,6 +126,7 @@ impl Mirror for Object {
             Object::Circle(c, material) => Object::Circle(c.mirror_y(), *material),
             Object::Rect(r, material) => Object::Rect(r.mirror_y(), *material),
             Object::Lens(l, material) => Object::Lens(l.mirror_y(), *material),
+            Object::ConvexPolygon(cp, material) => Object::ConvexPolygon(cp.mirror_y(), *material),
             Object::Geo(g, material) => Object::Geo(g.mirror_y(), *material),
         }
     }
@@ -132,6 +140,7 @@ impl Contains for Object {
             Object::Circle(c, _) => c.contains(p),
             Object::Rect(r, _) => r.contains(p),
             Object::Lens(l, _) => l.get_logic().contains(p),
+            Object::ConvexPolygon(cp, _) => cp.contains(p),
             Object::Geo(g, _) => g.contains(p),
         }
     }
@@ -145,6 +154,7 @@ impl Distance for Object {
             Object::Circle(c, _) => c.distance(p),
             Object::Rect(r, _) => r.distance(p),
             Object::Lens(l, _) => l.get_logic().distance(p),
+            Object::ConvexPolygon(cp, _) => cp.distance(p),
             Object::Geo(g, _) => g.distance(p),
         }
     }
