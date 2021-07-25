@@ -295,7 +295,7 @@ impl Tracer {
                                     &intersection,
                                     &normal,
                                     material.refractive_index,
-                                    1.,
+                                    *refractive_index,
                                 );
                             } else {
                                 updated_refractive_index = material.refractive_index;
