@@ -11,6 +11,7 @@ use rayon::prelude::*;
 use std::{collections::VecDeque, f64::consts::*};
 pub use string_mod::*;
 pub use tracer::*;
+pub use tile_map::*;
 use wgpu::BlendState;
 
 pub mod grid;
@@ -18,6 +19,7 @@ pub mod light;
 pub mod object;
 pub mod string_mod;
 pub mod tracer;
+pub mod tile_map;
 /// the maximum from an objects/lights origin at which a DragEvent can move it
 const MOVE_DIST: Float = 0.2;
 

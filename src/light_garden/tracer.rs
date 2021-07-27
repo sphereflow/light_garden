@@ -11,6 +11,7 @@ pub struct Tracer {
     pub grid: Grid,
     pub canvas_bounds: Rect,
     pub trace_time_vd: VecDeque<f64>,
+    tile_map: TileMap,
 }
 
 impl Tracer {
@@ -23,9 +24,18 @@ impl Tracer {
         let mut cubic2 = CubicBezier::new_sample2();
         cubic2.scale(0.5, 0.5);
         let curved_mirror2 = Object::CurvedMirror(CurvedMirror { cubic: cubic2 });
+        let objects = vec![lens, curved_mirror1, curved_mirror2];
+        let mut tile_map = TileMap::new(canvas_bounds.width, canvas_bounds.height, 100, 100, 8);
+        for (ix, obj) in objects.iter().enumerate() {
+            tile_map.add_obj(ix, obj);
+        }
+        println!("canvas_bounds: {:?}", canvas_bounds);
+        for tile in &tile_map.tiles {
+            println!("aabb: {:?}", tile.aabb);
+        }
         Tracer {
             lights: vec![light],
-            objects: vec![lens, curved_mirror1, curved_mirror2],
+            objects,
             drawing_object: None,
             drawing_light: None,
             max_bounce: 5,
@@ -34,6 +44,7 @@ impl Tracer {
             grid: Grid::new(&canvas_bounds),
             canvas_bounds: *canvas_bounds,
             trace_time_vd: VecDeque::new(),
+            tile_map,
         }
     }
 
@@ -52,6 +63,10 @@ impl Tracer {
     pub fn resize(&mut self, bounds: &Rect) {
         self.canvas_bounds = *bounds;
         self.grid.update_canvas_bounds(bounds);
+        self.tile_map = TileMap::new(bounds.width, bounds.height, 30, 30, 8);
+        for (ix, obj) in self.objects.iter().enumerate() {
+            self.tile_map.add_obj(ix, obj);
+        }
     }
 
     pub fn get_trace_time(&self) -> f64 {
@@ -269,13 +284,15 @@ impl Tracer {
                 let mut nearest: Float = std::f64::MAX;
                 // (intersection point, normal, object index)
                 let mut nearest_target: Option<(P2, Normal, usize)> = None;
-                for (index, obj) in self.objects.iter().enumerate() {
-                    if let Some(intersections) = ray.intersect(&obj.get_geometry()) {
-                        for (intersection, normal) in intersections {
-                            let dist_sq = distance_squared(&ray.get_origin(), &intersection);
-                            if dist_sq < nearest {
-                                nearest = dist_sq;
-                                nearest_target = Some((intersection, normal, index));
+                for slab in self.tile_map.index(ray) {
+                    for index in &slab.obj_indices {
+                        if let Some(intersections) = ray.intersect(&self.objects[*index].get_geometry()) {
+                            for (intersection, normal) in intersections {
+                                let dist_sq = distance_squared(&ray.get_origin(), &intersection);
+                                if dist_sq < nearest {
+                                    nearest = dist_sq;
+                                    nearest_target = Some((intersection, normal, *index));
+                                }
                             }
                         }
                     }
@@ -337,7 +354,11 @@ impl Tracer {
                             back_buffer.push((reflected, reflected_color, *refractive_index));
                             // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
                             if let Some(refracted) = orefracted {
-                                back_buffer.push((refracted, refracted_color, refracted_refractive_index));
+                                back_buffer.push((
+                                    refracted,
+                                    refracted_color,
+                                    refracted_refractive_index,
+                                ));
                             }
                         }
                     }
