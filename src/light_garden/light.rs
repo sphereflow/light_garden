@@ -208,9 +208,9 @@ impl SpotLight {
         self.rays = Vec::with_capacity(num_rays as usize);
         let direction_angle = if self.spot_direction.x.abs() < EPSILON {
             if self.spot_direction.y >= 0. {
-                -std::f64::consts::PI * 0.5
-            } else {
                 std::f64::consts::PI * 0.5
+            } else {
+                -std::f64::consts::PI * 0.5
             }
         } else {
             (self.spot_direction.y / self.spot_direction.x).atan()
