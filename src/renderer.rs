@@ -105,7 +105,7 @@ impl Renderer {
                 label: Some("render pipeline"),
                 layout: Some(&pipeline_layout),
                 vertex: VertexState {
-                    module: &shader,
+                    module: shader,
                     entry_point: "vs_main",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -114,7 +114,7 @@ impl Renderer {
                     }],
                 },
                 fragment: Some(FragmentState {
-                    module: &shader,
+                    module: shader,
                     entry_point: "fs_main",
                     targets: &[app.color_state_descriptor.clone()],
                 }),
@@ -211,7 +211,7 @@ impl Renderer {
             usage: BufferUsage::VERTEX,
         });
         let (pipeline, bind_group) =
-            Renderer::create_pipeline(&sc_desc, device, queue, &shader, app);
+            Renderer::create_pipeline(sc_desc, device, queue, &shader, app);
 
         let texture_renderer =
             TextureRenderer::init(device, adapter, sc_desc, app.color_state_descriptor.clone());

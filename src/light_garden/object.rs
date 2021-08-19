@@ -27,7 +27,7 @@ impl Object {
     pub fn new_lens(origin: P2, radius: Float, distance: Float) -> Self {
         Object::Lens(Lens::new(origin, radius, distance), Material::default())
     }
-    pub fn new_convex_polygon(points: &Vec<P2>) -> Self {
+    pub fn new_convex_polygon(points: &[P2]) -> Self {
         Object::ConvexPolygon(ConvexPolygon::new_convex_hull(points), Material::default())
     }
     pub fn new_geo(geo: Geo) -> Self {

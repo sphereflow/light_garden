@@ -42,7 +42,7 @@ impl Tracer {
             max_bounce: 5,
             cutoff_color: [0.001; 4],
             chunk_size: 100,
-            grid: Grid::new(&canvas_bounds),
+            grid: Grid::new(canvas_bounds),
             canvas_bounds: *canvas_bounds,
             trace_time_vd: VecDeque::new(),
             tile_map,

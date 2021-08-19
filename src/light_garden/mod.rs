@@ -379,7 +379,7 @@ impl LightGarden {
                 points.push(self.mouse_pos);
                 if points.len() > 2 {
                     self.tracer.drawing_object = Some(Object::ConvexPolygon(
-                        ConvexPolygon::new_convex_hull(&points),
+                        ConvexPolygon::new_convex_hull(points),
                         Material::default(),
                     ));
                 }
@@ -427,6 +427,7 @@ impl LightGarden {
                                 }
                                 cm.cubic.points[min_ix] = drag_event.end;
                             }
+                            Object::Circle(_c, _m) => {}
                             _ => {}
                         }
                     }

@@ -438,8 +438,8 @@ impl EguiRenderer {
         self.update_buffers(
             device,
             queue,
-            &sc_desc,
-            &clipped_meshes,
+            sc_desc,
+            clipped_meshes,
             gui.scale_factor as f32,
         );
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {

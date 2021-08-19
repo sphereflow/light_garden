@@ -41,5 +41,5 @@ js-sys = "0.3.50"
 git = "https://github.com/sphereflow/collision2d"
 
 # for local development
-# [patch."https://github.com/sphereflow/collision2d"]
-# collision2d = { path = "../collision2d" }
+[patch."https://github.com/sphereflow/collision2d"]
+collision2d = { path = "../collision2d" }

@@ -24,14 +24,14 @@ impl Gui {
     }
 
     pub fn update(&mut self, ctx: &CtxRef) {
-        let bdisplay_ui = match self.app.mode {
+        let bdisplay_ui = matches!(
+            self.app.mode,
             Mode::NoMode
-            | Mode::Selected
-            | Mode::Selecting(None)
-            | Mode::DrawConvexPolygon { .. }
-            | Mode::StringMod => true,
-            _ => false,
-        };
+                | Mode::Selected
+                | Mode::Selecting(None)
+                | Mode::DrawConvexPolygon { .. }
+                | Mode::StringMod
+        );
         if !bdisplay_ui {
             self.gui_contains_pointer = false;
         }
@@ -39,7 +39,7 @@ impl Gui {
             let window = Window::new("Light Garden");
             window
                 .default_size(Vec2::new(300.0, 100.0))
-                .show(&ctx, |ui| {
+                .show(ctx, |ui| {
                     self.last_cursor = ui.input().pointer.interact_pos();
                     if let Some(mouse_pos) = self.last_cursor {
                         ui.label(format!(
@@ -521,7 +521,10 @@ impl Gui {
     }
 
     pub fn toggle_tile_map(&mut self, ui: &mut Ui) {
-        ui.add(Checkbox::new(&mut self.app.tracer.tile_map_enabled, "TileMap enabled"));
+        ui.add(Checkbox::new(
+            &mut self.app.tracer.tile_map_enabled,
+            "TileMap enabled",
+        ));
     }
 
     pub fn grid_size(&mut self, ui: &mut Ui) {

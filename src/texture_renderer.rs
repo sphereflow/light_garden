@@ -151,7 +151,7 @@ impl TextureRenderer {
             label: Some("render to texture pipeline"),
             layout: Some(&pipeline_layout),
             vertex: VertexState {
-                module: &shader,
+                module: shader,
                 entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -160,7 +160,7 @@ impl TextureRenderer {
                 }],
             },
             fragment: Some(FragmentState {
-                module: &shader,
+                module: shader,
                 entry_point: "fs_main",
                 targets: &[color_state_descriptor],
             }),
