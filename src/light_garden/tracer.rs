@@ -60,10 +60,15 @@ impl Tracer {
         }
     }
 
+    pub fn obj_changed(&mut self, obj_index: usize) {
+        self.tile_map.delete_obj(obj_index);
+        self.tile_map.add_obj(obj_index, &self.objects[obj_index]);
+    }
+
     pub fn resize(&mut self, bounds: &Rect) {
         self.canvas_bounds = *bounds;
         self.grid.update_canvas_bounds(bounds);
-        self.tile_map = TileMap::new(bounds.width, bounds.height, 30, 30, 8);
+        self.tile_map = TileMap::new(bounds.width, bounds.height, 100, 100, 20);
         for (ix, obj) in self.objects.iter().enumerate() {
             self.tile_map.add_obj(ix, obj);
         }

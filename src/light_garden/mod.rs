@@ -10,16 +10,16 @@ pub use object::*;
 use rayon::prelude::*;
 use std::{collections::VecDeque, f64::consts::*};
 pub use string_mod::*;
-pub use tracer::*;
 pub use tile_map::*;
+pub use tracer::*;
 use wgpu::BlendState;
 
 pub mod grid;
 pub mod light;
 pub mod object;
 pub mod string_mod;
-pub mod tracer;
 pub mod tile_map;
+pub mod tracer;
 /// the maximum from an objects/lights origin at which a DragEvent can move it
 const MOVE_DIST: Float = 0.2;
 
@@ -338,6 +338,7 @@ impl LightGarden {
                     .objects
                     .push(Object::new_mirror(start, self.mouse_pos));
                 self.tracer.drawing_object = None;
+                self.tracer.obj_changed(self.tracer.objects.len() - 1);
                 self.mode = Mode::Selecting(None);
             }
 
@@ -351,6 +352,7 @@ impl LightGarden {
                 self.tracer
                     .objects
                     .push(Object::new_circle(start, distance(&start, &self.mouse_pos)));
+                self.tracer.obj_changed(self.tracer.objects.len() - 1);
                 self.tracer.drawing_object = None;
                 self.mode = Mode::Selecting(None);
             }
@@ -368,6 +370,7 @@ impl LightGarden {
                 self.tracer
                     .objects
                     .push(Object::new_rect(start, width, height));
+                self.tracer.obj_changed(self.tracer.objects.len() - 1);
                 self.tracer.drawing_object = None;
                 self.mode = Mode::Selecting(None);
             }
@@ -448,6 +451,7 @@ impl LightGarden {
 
     pub fn get_selected_object(&mut self) -> Option<&mut Object> {
         if let Some(ix) = self.selected_object {
+            self.tracer.obj_changed(ix);
             Some(&mut self.tracer.objects[ix])
         } else {
             None
