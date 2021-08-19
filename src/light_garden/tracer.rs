@@ -289,9 +289,11 @@ impl Tracer {
                 let mut nearest: Float = std::f64::MAX;
                 // (intersection point, normal, object index)
                 let mut nearest_target: Option<(P2, Normal, usize)> = None;
-                for slab in self.tile_map.index(ray) {
+                if let Some(slab) = self.tile_map.index(ray) {
                     for index in &slab.obj_indices {
-                        if let Some(intersections) = ray.intersect(&self.objects[*index].get_geometry()) {
+                        if let Some(intersections) =
+                            ray.intersect(&self.objects[*index].get_geometry())
+                        {
                             for (intersection, normal) in intersections {
                                 let dist_sq = distance_squared(&ray.get_origin(), &intersection);
                                 if dist_sq < nearest {
