@@ -126,11 +126,11 @@ impl Tile {
         }
     }
     pub fn index(&self, direction: U2) -> &Slab {
-        let mut radian_angle = direction.y.acos() - EPSILON;
+        let mut radian_angle = direction.y.acos();
         if direction.x < 0.0 {
             radian_angle = TAU - radian_angle;
         }
-        let ix = (self.slabs.len() as Float * radian_angle / TAU) as usize;
+        let ix = ((self.slabs.len() as Float * radian_angle / TAU) - EPSILON) as usize;
         &self.slabs[ix]
     }
 }
@@ -139,21 +139,29 @@ impl Tile {
 pub struct Slab {
     rleft: Ray,
     rright: Ray,
+    ls: LineSegment,
     pub obj_indices: Vec<usize>,
 }
 
 impl Slab {
     pub fn new(aabb: &Aabb, direction_left: &V2, direction_right: &V2) -> Self {
+        let qleft = get_quadrant(direction_left);
+        let qright = get_quadrant(direction_right);
+        let rleft = qleft.get_left_ray(aabb, direction_left);
+        let rright = qright.get_right_ray(aabb, direction_right);
         Slab {
-            rleft: get_quadrant(direction_left).get_left_ray(aabb, direction_left),
-            rright: get_quadrant(direction_right).get_right_ray(aabb, direction_right),
+            rleft,
+            rright,
+            ls: LineSegment::from_ab(rleft.get_origin(), rright.get_origin()),
             obj_indices: Vec::new(),
         }
     }
     pub fn overlaps(&self, obj: &Object) -> bool {
+        let geo = obj.get_geometry();
         between_rays(&obj.get_origin(), &self.rleft, &self.rright)
-            || self.rleft.intersect(&obj.get_geometry()).is_some()
-            || self.rright.intersect(&obj.get_geometry()).is_some()
+            || self.rleft.intersect(&geo).is_some()
+            || self.rright.intersect(&geo).is_some()
+            || geo.intersect(&self.ls).is_some()
     }
 }
 
@@ -195,21 +203,7 @@ fn get_quadrant(direction: &V2) -> Quadrant {
 
 impl Quadrant {
     fn get_left_ray(&self, aabb: &Aabb, direction_left: &V2) -> Ray {
-        let mut left = match self {
-            Quadrant::Q0 => {
-                Ray::from_origin(P2::new(aabb.get_left(), aabb.get_top()), *direction_left)
-            }
-            Quadrant::Q1 => {
-                Ray::from_origin(P2::new(aabb.get_right(), aabb.get_top()), *direction_left)
-            }
-            Quadrant::Q2 => Ray::from_origin(
-                P2::new(aabb.get_right(), aabb.get_bottom()),
-                *direction_left,
-            ),
-            Quadrant::Q3 => {
-                Ray::from_origin(P2::new(aabb.get_left(), aabb.get_bottom()), *direction_left)
-            }
-        };
+        let mut left = Ray::from_origin(self.get_point_left(aabb), *direction_left);
         let dist = Line::new(left.get_origin(), left.get_normal().into_inner())
             .distance(&self.get_opposing_point(aabb));
         left.shift(-dist.abs() * left.get_direction().into_inner());
@@ -217,26 +211,29 @@ impl Quadrant {
     }
 
     fn get_right_ray(&self, aabb: &Aabb, direction_right: &V2) -> Ray {
-        let mut right = match self {
-            Quadrant::Q0 => Ray::from_origin(
-                P2::new(aabb.get_right(), aabb.get_bottom()),
-                *direction_right,
-            ),
-            Quadrant::Q1 => Ray::from_origin(
-                P2::new(aabb.get_left(), aabb.get_bottom()),
-                *direction_right,
-            ),
-            Quadrant::Q2 => {
-                Ray::from_origin(P2::new(aabb.get_left(), aabb.get_top()), *direction_right)
-            }
-            Quadrant::Q3 => {
-                Ray::from_origin(P2::new(aabb.get_right(), aabb.get_top()), *direction_right)
-            }
-        };
+        let mut right = Ray::from_origin(self.get_point_right(aabb), *direction_right);
         let dist = Line::new(right.get_origin(), right.get_normal().into_inner())
             .distance(&self.get_opposing_point(aabb));
         right.shift(-dist.abs() * right.get_direction().into_inner());
         right
+    }
+
+    fn get_point_left(&self, aabb: &Aabb) -> P2 {
+        match self {
+            Quadrant::Q0 => P2::new(aabb.get_left(), aabb.get_top()),
+            Quadrant::Q1 => P2::new(aabb.get_right(), aabb.get_top()),
+            Quadrant::Q2 => P2::new(aabb.get_right(), aabb.get_bottom()),
+            Quadrant::Q3 => P2::new(aabb.get_left(), aabb.get_bottom()),
+        }
+    }
+
+    fn get_point_right(&self, aabb: &Aabb) -> P2 {
+        match self {
+            Quadrant::Q0 => P2::new(aabb.get_right(), aabb.get_bottom()),
+            Quadrant::Q1 => P2::new(aabb.get_left(), aabb.get_bottom()),
+            Quadrant::Q2 => P2::new(aabb.get_left(), aabb.get_top()),
+            Quadrant::Q3 => P2::new(aabb.get_right(), aabb.get_top()),
+        }
     }
 
     fn get_opposing_point(&self, aabb: &Aabb) -> P2 {
