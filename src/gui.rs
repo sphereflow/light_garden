@@ -264,6 +264,8 @@ impl Gui {
         self.edit_cutoff_color(ui);
 
         self.toggle_render_to_texture(ui);
+
+        self.toggle_tile_map(ui);
     }
 
     fn grid(&mut self, ui: &mut Ui) {
@@ -516,6 +518,10 @@ impl Gui {
         let mut render_to_texture = self.app.get_render_to_texture();
         ui.add(Checkbox::new(&mut render_to_texture, "render to texture"));
         self.app.set_render_to_texture(render_to_texture);
+    }
+
+    pub fn toggle_tile_map(&mut self, ui: &mut Ui) {
+        ui.add(Checkbox::new(&mut self.app.tracer.tile_map_enabled, "TileMap enabled"));
     }
 
     pub fn grid_size(&mut self, ui: &mut Ui) {

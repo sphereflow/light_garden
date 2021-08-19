@@ -12,6 +12,7 @@ pub struct Tracer {
     pub canvas_bounds: Rect,
     pub trace_time_vd: VecDeque<f64>,
     tile_map: TileMap,
+    pub tile_map_enabled: bool,
 }
 
 impl Tracer {
@@ -45,6 +46,7 @@ impl Tracer {
             canvas_bounds: *canvas_bounds,
             trace_time_vd: VecDeque::new(),
             tile_map,
+            tile_map_enabled: true,
         }
     }
 
@@ -289,19 +291,37 @@ impl Tracer {
                 let mut nearest: Float = std::f64::MAX;
                 // (intersection point, normal, object index)
                 let mut nearest_target: Option<(P2, Normal, usize)> = None;
-                if let Some(slab) = self.tile_map.index(ray) {
-                    for index in &slab.obj_indices {
-                        if let Some(intersections) =
-                            ray.intersect(&self.objects[*index].get_geometry())
-                        {
-                            for (intersection, normal) in intersections {
-                                let dist_sq = distance_squared(&ray.get_origin(), &intersection);
-                                if dist_sq < nearest {
-                                    nearest = dist_sq;
-                                    nearest_target = Some((intersection, normal, *index));
+                if self.tile_map_enabled {
+                    if let Some(slab) = self.tile_map.index(ray) {
+                        for index in &slab.obj_indices {
+                            if let Some(intersections) =
+                                ray.intersect(&self.objects[*index].get_geometry())
+                            {
+                                for (intersection, normal) in intersections {
+                                    let dist_sq =
+                                        distance_squared(&ray.get_origin(), &intersection);
+                                    if dist_sq < nearest {
+                                        nearest = dist_sq;
+                                        nearest_target = Some((intersection, normal, *index));
+                                    }
                                 }
                             }
                         }
+                    }
+                } else {
+                    for (index, obj) in self.objects.iter().enumerate() {
+                            if let Some(intersections) =
+                                ray.intersect(&obj.get_geometry())
+                            {
+                                for (intersection, normal) in intersections {
+                                    let dist_sq =
+                                        distance_squared(&ray.get_origin(), &intersection);
+                                    if dist_sq < nearest {
+                                        nearest = dist_sq;
+                                        nearest_target = Some((intersection, normal, index));
+                                    }
+                                }
+                            }
                     }
                 }
 
