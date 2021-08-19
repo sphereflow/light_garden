@@ -97,7 +97,7 @@ impl Renderer {
         if app.get_render_to_texture() {
             app.color_state_descriptor.format = RENDER_TEXTURE_FORMAT;
         } else {
-            app.color_state_descriptor.format = TextureFormat::Bgra8UnormSrgb;
+            app.color_state_descriptor.format = sc_desc.format;
         }
 
         (
