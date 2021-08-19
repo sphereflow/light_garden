@@ -209,8 +209,14 @@ fn start(
                 let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
 
                 renderer.render(&frame.output, &device, &queue, &mut gui, &clipped_meshes); // &clipped_meshes);
-                if let Some(path) = gui.app.screenshot_path.take(){
-                    future::block_on(renderer.make_screenshot(path, &device, &queue, gui.app.get_render_to_texture()));
+                if let Some(path) = gui.app.screenshot_path.take() {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    future::block_on(renderer.make_screenshot(
+                        path,
+                        &device,
+                        &queue,
+                        gui.app.get_render_to_texture(),
+                    ));
                 }
             }
 
