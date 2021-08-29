@@ -19,8 +19,7 @@ pub struct TextureRenderer {
 impl TextureRenderer {
     pub fn init(
         device: &Device,
-        adapter: &Adapter,
-        sc_desc: &SwapChainDescriptor,
+        surface_config: &SurfaceConfiguration,
         color_state_descriptor: ColorTargetState,
     ) -> Self {
         let background_quad: Vec<Vertex> = vec![
@@ -52,19 +51,19 @@ impl TextureRenderer {
         let background_quad_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
             label: Some("background quad buffer"),
             contents: bytemuck::cast_slice(&background_quad),
-            usage: BufferUsage::VERTEX,
+            usage: BufferUsages::VERTEX,
         });
         let indices = [0_u16, 1, 2, 0, 2, 3];
         let background_quad_index_buffer = device.create_buffer_init(&util::BufferInitDescriptor {
             label: Some("background quad index buffer"),
             contents: bytemuck::cast_slice(&indices),
-            usage: BufferUsage::INDEX,
+            usage: BufferUsages::INDEX,
         });
         let index_buffer_size = indices.len() as u32;
 
         let dimensions = Extent3d {
-            width: sc_desc.width,
-            height: sc_desc.height,
+            width: surface_config.width,
+            height: surface_config.height,
             depth_or_array_layers: 1,
         };
         let render_texture = device.create_texture(&TextureDescriptor {
@@ -74,27 +73,18 @@ impl TextureRenderer {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: RENDER_TEXTURE_FORMAT,
-            usage: TextureUsage::RENDER_ATTACHMENT | TextureUsage::SAMPLED | TextureUsage::COPY_DST,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
         });
-
-        let mut flags = wgpu::ShaderFlags::VALIDATION;
-        match adapter.get_info().backend {
-            wgpu::Backend::Metal | wgpu::Backend::Vulkan => {
-                flags |= wgpu::ShaderFlags::EXPERIMENTAL_TRANSLATION
-            }
-            _ => (), //TODO
-        }
 
         use std::borrow::Cow;
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("render to texture shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("render_to_texture.wgsl"))),
-            flags,
         });
 
         let (pipeline, bind_group_layout, bind_group, sampler) = TextureRenderer::create_pipeline(
             device,
-            sc_desc,
+            surface_config,
             &shader,
             &render_texture,
             color_state_descriptor,
@@ -115,12 +105,12 @@ impl TextureRenderer {
 
     pub fn create_pipeline(
         device: &Device,
-        sc_desc: &SwapChainDescriptor,
+        surface_config: &SurfaceConfiguration,
         shader: &ShaderModule,
         render_texture: &Texture,
         mut color_state_descriptor: ColorTargetState,
     ) -> (RenderPipeline, BindGroupLayout, BindGroup, Sampler) {
-        color_state_descriptor.format = sc_desc.format;
+        color_state_descriptor.format = surface_config.format;
 
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             address_mode_u: wgpu::AddressMode::ClampToEdge,
@@ -155,7 +145,7 @@ impl TextureRenderer {
                 entry_point: "vs_main",
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
                 }],
             },
@@ -183,7 +173,7 @@ impl TextureRenderer {
             entries: &[
                 wgpu::BindGroupLayoutEntry {
                     binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Texture {
                         multisampled: false,
                         sample_type: wgpu::TextureSampleType::Float { filterable: false },
@@ -193,7 +183,7 @@ impl TextureRenderer {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler {
                         comparison: false,
                         filtering: true,
@@ -228,10 +218,10 @@ impl TextureRenderer {
         })
     }
 
-    pub fn generate_render_texture(&mut self, device: &Device, sc_desc: &SwapChainDescriptor) {
+    pub fn generate_render_texture(&mut self, device: &Device, surface_config: &SurfaceConfiguration) {
         let dimensions = Extent3d {
-            width: sc_desc.width,
-            height: sc_desc.height,
+            width: surface_config.width,
+            height: surface_config.height,
             depth_or_array_layers: 1,
         };
         self.render_texture = device.create_texture(&TextureDescriptor {
@@ -241,7 +231,7 @@ impl TextureRenderer {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: RENDER_TEXTURE_FORMAT,
-            usage: TextureUsage::RENDER_ATTACHMENT | TextureUsage::SAMPLED | TextureUsage::COPY_DST,
+            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
         });
     }
 }

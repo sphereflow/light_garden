@@ -31,9 +31,6 @@ impl Tracer {
             tile_map.add_obj(ix, obj);
         }
         println!("canvas_bounds: {:?}", canvas_bounds);
-        for tile in &tile_map.tiles {
-            println!("aabb: {:?}", tile.aabb);
-        }
         Tracer {
             lights: vec![light],
             objects,

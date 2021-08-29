@@ -3,7 +3,7 @@ use crate::gui::Gui;
 use bytemuck::{Pod, Zeroable};
 use egui::*;
 use std::sync::Arc;
-use std::{iter, num::NonZeroU32};
+use std::num::NonZeroU32;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -46,23 +46,11 @@ pub struct EguiRenderer {
 }
 
 impl EguiRenderer {
-    pub fn init(device: &Device, adapter: &Adapter, output_format: TextureFormat) -> Self {
-        // let vs_module = device.create_shader_module(&include_spirv!("egui.vert.spv"));
-        // let fs_module = device.create_shader_module(&include_spirv!("egui.frag.spv"));
-
-        let mut flags = wgpu::ShaderFlags::VALIDATION;
-        match adapter.get_info().backend {
-            wgpu::Backend::Metal | wgpu::Backend::Vulkan => {
-                flags |= wgpu::ShaderFlags::EXPERIMENTAL_TRANSLATION
-            }
-            _ => (), //TODO
-        }
-
+    pub fn init(device: &Device, output_format: TextureFormat) -> Self {
         use std::borrow::Cow;
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("egui: wgsl shader module"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("egui.wgsl"))),
-            flags,
         });
 
         // eguis initialization
@@ -71,7 +59,7 @@ impl EguiRenderer {
             contents: bytemuck::cast_slice(&[UniformBuffer {
                 screen_size: [0.0, 0.0],
             }]),
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         // uniform buffer for screen size
@@ -80,30 +68,51 @@ impl EguiRenderer {
             size: std::mem::size_of::<UniformBuffer>(),
         };
 
-        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-            label: Some("egui: texture_sampler"),
-            mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Linear,
-            ..Default::default()
-        });
-
         let uniform_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                 label: Some("egui: uniform_bind_group_layout"),
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX,
+                    ty: wgpu::BindingType::Buffer {
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                        ty: wgpu::BufferBindingType::Uniform,
+                    },
+                    count: None,
+                }],
+            });
+
+        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("egui: uniform_bind_group"),
+            layout: &uniform_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(BufferBinding {
+                    buffer: &uniform_buffer.buffer,
+                    offset: 0,
+                    size: None,
+                }),
+            }],
+        });
+
+        let texture_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                label: Some("egui: texture_bind_group_layout"),
                 entries: &[
                     wgpu::BindGroupLayoutEntry {
                         binding: 0,
-                        visibility: wgpu::ShaderStage::VERTEX,
-                        ty: wgpu::BindingType::Buffer {
-                            has_dynamic_offset: false,
-                            min_binding_size: None,
-                            ty: wgpu::BufferBindingType::Uniform,
+                        visibility: wgpu::ShaderStages::FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            multisampled: false,
+                            sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                            view_dimension: wgpu::TextureViewDimension::D2,
                         },
                         count: None,
                     },
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
-                        visibility: wgpu::ShaderStage::FRAGMENT,
+                        visibility: ShaderStages::FRAGMENT,
                         ty: wgpu::BindingType::Sampler {
                             filtering: true,
                             comparison: false,
@@ -111,40 +120,6 @@ impl EguiRenderer {
                         count: None,
                     },
                 ],
-            });
-
-        let uniform_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("egui: uniform_bind_group"),
-            layout: &uniform_bind_group_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::Buffer(BufferBinding {
-                        buffer: &uniform_buffer.buffer,
-                        offset: 0,
-                        size: None,
-                    }),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: wgpu::BindingResource::Sampler(&sampler),
-                },
-            ],
-        });
-
-        let texture_bind_group_layout =
-            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                label: Some("egui: texture_bind_group_layout"),
-                entries: &[wgpu::BindGroupLayoutEntry {
-                    binding: 0,
-                    visibility: wgpu::ShaderStage::FRAGMENT,
-                    ty: wgpu::BindingType::Texture {
-                        multisampled: false,
-                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
-                        view_dimension: wgpu::TextureViewDimension::D2,
-                    },
-                    count: None,
-                }],
             });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -162,7 +137,7 @@ impl EguiRenderer {
                 module: &shader,
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: 5 * 4,
-                    step_mode: wgpu::InputStepMode::Vertex,
+                    step_mode: wgpu::VertexStepMode::Vertex,
                     // 0: vec2 position
                     // 1: vec2 texture coordinates
                     // 2: uint color
@@ -201,7 +176,7 @@ impl EguiRenderer {
                             operation: wgpu::BlendOperation::Add,
                         },
                     }),
-                    write_mask: wgpu::ColorWrite::ALL,
+                    write_mask: wgpu::ColorWrites::ALL,
                 }],
             }),
         });
@@ -213,8 +188,8 @@ impl EguiRenderer {
             uniform_buffer,
             uniform_bind_group,
             texture_bind_group_layout,
-            texture_bind_group: None,
             texture_version: None,
+            texture_bind_group: None,
             next_user_texture_id: 0,
             pending_user_textures: Vec::new(),
             user_textures: Vec::new(),
@@ -226,7 +201,7 @@ impl EguiRenderer {
         &mut self,
         device: &Device,
         queue: &Queue,
-        sc_desc: &SwapChainDescriptor,
+        surface_config: &wgpu::SurfaceConfiguration,
         clipped_meshes: &[ClippedMesh],
         scale_factor: f32,
     ) {
@@ -234,8 +209,8 @@ impl EguiRenderer {
         let vertex_size = self.vertex_buffers.len();
 
         let (logical_width, logical_height) = (
-            sc_desc.width as f32 / scale_factor,
-            sc_desc.height as f32 / scale_factor,
+            surface_config.width as f32 / scale_factor,
+            surface_config.height as f32 / scale_factor,
         );
 
         self.update_buffer(
@@ -256,7 +231,7 @@ impl EguiRenderer {
                 let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("egui_index_buffer"),
                     contents: data,
-                    usage: wgpu::BufferUsage::INDEX | wgpu::BufferUsage::COPY_DST,
+                    usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
                 });
                 let s_buffer = SizedBuffer {
                     buffer,
@@ -272,7 +247,7 @@ impl EguiRenderer {
                 let buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                     label: Some("egui_vertex_buffer"),
                     contents: data,
-                    usage: wgpu::BufferUsage::VERTEX | wgpu::BufferUsage::COPY_DST,
+                    usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
                 });
                 let s_buffer = SizedBuffer {
                     buffer,
@@ -294,20 +269,20 @@ impl EguiRenderer {
         data: &[u8],
     ) {
         let (buffer, storage, name) = match buffer_type {
-            BufferType::Index => (&mut self.index_buffers[index], BufferUsage::INDEX, "index"),
+            BufferType::Index => (&mut self.index_buffers[index], BufferUsages::INDEX, "index"),
             BufferType::Vertex => (
                 &mut self.vertex_buffers[index],
-                BufferUsage::VERTEX,
+                BufferUsages::VERTEX,
                 "vertex",
             ),
-            BufferType::Uniform => (&mut self.uniform_buffer, BufferUsage::UNIFORM, "uniform"),
+            BufferType::Uniform => (&mut self.uniform_buffer, BufferUsages::UNIFORM, "uniform"),
         };
 
         if data.len() > buffer.size {
             buffer.buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(format!("egui_{}_buffer", name).as_str()),
                 contents: bytemuck::cast_slice(data),
-                usage: storage | wgpu::BufferUsage::COPY_DST,
+                usage: storage | wgpu::BufferUsages::COPY_DST,
             });
         } else {
             queue.write_buffer(&buffer.buffer, 0, data);
@@ -374,7 +349,7 @@ impl EguiRenderer {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: wgpu::TextureFormat::Bgra8UnormSrgb,
-            usage: wgpu::TextureUsage::SAMPLED | wgpu::TextureUsage::COPY_DST,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
         });
 
         queue.write_texture(
@@ -382,6 +357,7 @@ impl EguiRenderer {
                 texture: &wgpu_texture,
                 mip_level: 0,
                 origin: wgpu::Origin3d::ZERO,
+                aspect: TextureAspect::All,
             },
             texture.pixels.as_slice(),
             wgpu::ImageDataLayout {
@@ -392,15 +368,28 @@ impl EguiRenderer {
             size,
         );
 
+        let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("egui: texture_sampler"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+
         let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some(format!("{}_texture_bind_group", label).as_str()),
             layout: &self.texture_bind_group_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::TextureView(
-                    &wgpu_texture.create_view(&wgpu::TextureViewDescriptor::default()),
-                ),
-            }],
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(
+                        &wgpu_texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                    ),
+                },
+                BindGroupEntry {
+                    binding: 1,
+                    resource: BindingResource::Sampler(&sampler),
+                },
+            ],
         });
 
         bind_group
@@ -428,7 +417,8 @@ impl EguiRenderer {
         &mut self,
         device: &Device,
         queue: &Queue,
-        sc_desc: &SwapChainDescriptor,
+        encoder: &mut CommandEncoder,
+        surface_config: &SurfaceConfiguration,
         color_attachment: &TextureView,
         gui: &mut Gui,
         clipped_meshes: &[ClippedMesh],
@@ -438,13 +428,10 @@ impl EguiRenderer {
         self.update_buffers(
             device,
             queue,
-            sc_desc,
+            surface_config,
             clipped_meshes,
             gui.scale_factor as f32,
         );
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("egui command encoder"),
-        });
         {
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("egui render pass"),
@@ -461,8 +448,8 @@ impl EguiRenderer {
             rpass.set_pipeline(&self.render_pipeline);
             rpass.set_bind_group(0, &self.uniform_bind_group, &[]);
             let scale_factor = gui.scale_factor;
-            let physical_width = sc_desc.width;
-            let physical_height = sc_desc.height;
+            let physical_width = surface_config.width;
+            let physical_height = surface_config.height;
 
             for ((ClippedMesh(clip_rect, triangles), vertex_buffer), index_buffer) in clipped_meshes
                 .iter()
@@ -485,7 +472,6 @@ impl EguiRenderer {
                 rpass.draw_indexed(0..triangles.indices.len() as u32, 0, 0..1);
             }
         }
-        queue.submit(iter::once(encoder.finish()));
     }
 
     /// returns if the area of the clip rect is non zero

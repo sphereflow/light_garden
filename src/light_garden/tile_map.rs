@@ -44,10 +44,6 @@ impl TileMap {
                 tiles.push(Tile { aabb, slabs });
             }
         }
-        for slab in &tiles[4].slabs {
-            println!("directionl: {:?}", slab.rleft.get_direction());
-            println!("directionr: {:?}", slab.rright.get_direction());
-        }
         TileMap {
             window_width,
             window_height,

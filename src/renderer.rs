@@ -30,14 +30,14 @@ pub struct Renderer {
     matrix_bind_group: BindGroup,
     rebuild_bundle: bool,
     texture_renderer: TextureRenderer,
-    sc_desc: SwapChainDescriptor,
+    surface_config: SurfaceConfiguration,
     pub egui_renderer: EguiRenderer,
     pub make_screenshot: bool,
 }
 
 impl Renderer {
     fn create_pipeline(
-        sc_desc: &SwapChainDescriptor,
+        surface_config: &SurfaceConfiguration,
         device: &Device,
         queue: &Queue,
         shader: &ShaderModule,
@@ -49,7 +49,7 @@ impl Renderer {
             label: Some("Renderer: bind group layout"),
             entries: &[wgpu::BindGroupLayoutEntry {
                 binding: 0,
-                visibility: wgpu::ShaderStage::VERTEX,
+                visibility: wgpu::ShaderStages::VERTEX,
                 ty: wgpu::BindingType::Buffer {
                     ty: BufferBindingType::Uniform,
                     has_dynamic_offset: false,
@@ -60,13 +60,13 @@ impl Renderer {
         });
 
         // create the projection matrix
-        let aspect = sc_desc.width as f32 / sc_desc.height as f32;
+        let aspect = surface_config.width as f32 / surface_config.height as f32;
         let mx = Self::generate_matrix(aspect);
         let mx_ref: &[f32; 16] = mx.as_ref();
         let mx_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("u_Transform"),
             contents: bytemuck::cast_slice(mx_ref),
-            usage: wgpu::BufferUsage::UNIFORM | wgpu::BufferUsage::COPY_DST,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
         });
 
         // set new canvas bounds
@@ -97,7 +97,7 @@ impl Renderer {
         if app.get_render_to_texture() {
             app.color_state_descriptor.format = RENDER_TEXTURE_FORMAT;
         } else {
-            app.color_state_descriptor.format = sc_desc.format;
+            app.color_state_descriptor.format = surface_config.format;
         }
 
         (
@@ -109,8 +109,8 @@ impl Renderer {
                     entry_point: "vs_main",
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                        step_mode: wgpu::InputStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
+                        step_mode: VertexStepMode::Vertex,
+                        attributes: &vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
                     }],
                 },
                 fragment: Some(FragmentState {
@@ -146,7 +146,7 @@ impl Renderer {
         self.vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&vertex_data),
-            usage: BufferUsage::VERTEX,
+            usage: BufferUsages::VERTEX,
         });
         self.vertex_count = vertex_data.len() as u32;
         self.rebuild_bundle = true;
@@ -175,32 +175,22 @@ impl Renderer {
         self.vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(&vertex_data),
-            usage: BufferUsage::VERTEX,
+            usage: BufferUsages::VERTEX,
         });
         self.vertex_count = vertex_data.len() as u32;
         self.rebuild_bundle = true;
     }
 
     pub fn init(
-        sc_desc: &SwapChainDescriptor,
+        surface_config: &SurfaceConfiguration,
         device: &Device,
-        adapter: &Adapter,
         queue: &Queue, // we might need to meddle with the command queue
         app: &mut LightGarden,
     ) -> Self {
-        let mut flags = wgpu::ShaderFlags::VALIDATION;
-        match adapter.get_info().backend {
-            wgpu::Backend::Metal | wgpu::Backend::Vulkan => {
-                flags |= wgpu::ShaderFlags::EXPERIMENTAL_TRANSLATION
-            }
-            _ => (), //TODO
-        }
-
         use std::borrow::Cow;
         let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
             label: Some("Renderer: wgsl shader module"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
-            flags,
         });
 
         // create the vertex buffer
@@ -208,13 +198,13 @@ impl Renderer {
             label: Some("Vertex Buffer"),
             size: 0,
             mapped_at_creation: true,
-            usage: BufferUsage::VERTEX,
+            usage: BufferUsages::VERTEX,
         });
         let (pipeline, bind_group) =
-            Renderer::create_pipeline(sc_desc, device, queue, &shader, app);
+            Renderer::create_pipeline(surface_config, device, queue, &shader, app);
 
         let texture_renderer =
-            TextureRenderer::init(device, adapter, sc_desc, app.color_state_descriptor.clone());
+            TextureRenderer::init(device, surface_config, app.color_state_descriptor.clone());
 
         Renderer {
             shader,
@@ -224,8 +214,8 @@ impl Renderer {
             matrix_bind_group: bind_group,
             rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
             texture_renderer,
-            sc_desc: sc_desc.clone(),
-            egui_renderer: EguiRenderer::init(device, adapter, sc_desc.format),
+            surface_config: surface_config.clone(),
+            egui_renderer: EguiRenderer::init(device, surface_config.format),
             make_screenshot: false,
         }
     }
@@ -238,28 +228,28 @@ impl Renderer {
 
     pub fn resize(
         &mut self,
-        sc_desc: &SwapChainDescriptor,
+        surface_config: &SurfaceConfiguration,
         device: &Device,
         queue: &Queue,
         app: &mut LightGarden,
     ) {
-        self.sc_desc = sc_desc.clone();
+        self.surface_config = surface_config.clone();
         self.texture_renderer
-            .generate_render_texture(device, &self.sc_desc);
+            .generate_render_texture(device, &self.surface_config);
 
         let (pipeline, bind_group) =
-            Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, app);
+            Renderer::create_pipeline(&self.surface_config, device, queue, &self.shader, app);
         self.pipeline = pipeline;
         self.matrix_bind_group = bind_group;
         self.texture_renderer
-            .generate_render_texture(device, &self.sc_desc);
+            .generate_render_texture(device, &self.surface_config);
     }
 
     fn clear_render_texture(&mut self, queue: &Queue) {
-        let size = (self.sc_desc.width * self.sc_desc.height) as usize;
+        let size = (self.surface_config.width * self.surface_config.height) as usize;
         let dimensions = Extent3d {
-            width: self.sc_desc.width,
-            height: self.sc_desc.height,
+            width: self.surface_config.width,
+            height: self.surface_config.height,
             depth_or_array_layers: 1,
         };
         let black: Vec<[f32; 4]> = vec![[0., 0., 0., 1.]; size];
@@ -268,12 +258,13 @@ impl Renderer {
                 texture: &self.texture_renderer.render_texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
+                aspect: TextureAspect::All,
             },
             bytemuck::cast_slice(black.as_slice()),
             ImageDataLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(self.sc_desc.width * 4 * 4),
-                rows_per_image: NonZeroU32::new(self.sc_desc.height),
+                bytes_per_row: NonZeroU32::new(self.surface_config.width * 4 * 4),
+                rows_per_image: NonZeroU32::new(self.surface_config.height),
             },
             dimensions,
         );
@@ -316,18 +307,18 @@ impl Renderer {
         render_to_texture: bool,
     ) {
         let texture_extent = Extent3d {
-            width: self.sc_desc.width,
-            height: self.sc_desc.height,
+            width: self.surface_config.width,
+            height: self.surface_config.height,
             depth_or_array_layers: 1,
         };
         let format;
         let unpadded_bytes_per_row;
         if render_to_texture {
             format = RENDER_TEXTURE_FORMAT;
-            unpadded_bytes_per_row = 8 * self.sc_desc.width;
+            unpadded_bytes_per_row = 8 * self.surface_config.width;
         } else {
             format = TextureFormat::Bgra8UnormSrgb;
-            unpadded_bytes_per_row = 4 * self.sc_desc.width;
+            unpadded_bytes_per_row = 4 * self.surface_config.width;
         }
         let texture = device.create_texture(&TextureDescriptor {
             size: texture_extent,
@@ -335,7 +326,7 @@ impl Renderer {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format,
-            usage: TextureUsage::RENDER_ATTACHMENT | wgpu::TextureUsage::COPY_SRC,
+            usage: TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             label: None,
         });
         let view = &texture.create_view(&TextureViewDescriptor::default());
@@ -364,6 +355,7 @@ impl Renderer {
             texture: &texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
+            aspect: TextureAspect::All,
         };
         let align = COPY_BYTES_PER_ROW_ALIGNMENT;
         let is_aligned = match (unpadded_bytes_per_row) % align {
@@ -374,8 +366,8 @@ impl Renderer {
         let buff_desc = BufferDescriptor {
             label: Some("screen shot buffer descriptor"),
             mapped_at_creation: false,
-            size: (padded_bytes_per_row * self.sc_desc.height) as u64,
-            usage: BufferUsage::MAP_READ | BufferUsage::COPY_DST,
+            size: (padded_bytes_per_row * self.surface_config.height) as u64,
+            usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
         };
         let buff: Buffer = device.create_buffer(&buff_desc);
         let copy_buffer = ImageCopyBuffer {
@@ -383,7 +375,7 @@ impl Renderer {
             layout: ImageDataLayout {
                 offset: 0,
                 bytes_per_row: NonZeroU32::new(padded_bytes_per_row),
-                rows_per_image: NonZeroU32::new(self.sc_desc.height),
+                rows_per_image: NonZeroU32::new(self.surface_config.height),
             },
         };
         screenshot_encoder.copy_texture_to_buffer(copy_wrapper, copy_buffer, texture_extent);
@@ -408,8 +400,8 @@ impl Renderer {
             match save_buffer_with_format(
                 path,
                 &bufvec,
-                self.sc_desc.width,
-                self.sc_desc.height,
+                self.surface_config.width,
+                self.surface_config.height,
                 image::ColorType::Bgra8,
                 image::ImageFormat::Jpeg,
             ) {
@@ -445,7 +437,8 @@ impl Renderer {
         &mut self,
         device: &Device,
         queue: &Queue,
-        frame: &SwapChainTexture,
+        encoder: &mut CommandEncoder,
+        frame: &SurfaceTexture,
         gui: &mut Gui,
         clipped_meshes: &[ClippedMesh],
     ) {
@@ -455,7 +448,7 @@ impl Renderer {
             let (pipeline, _bind_group_layout, bind_group, _sampler) =
                 TextureRenderer::create_pipeline(
                     device,
-                    &self.sc_desc,
+                    &self.surface_config,
                     &self.texture_renderer.shader,
                     &self.texture_renderer.render_texture,
                     gui.app.color_state_descriptor.clone(),
@@ -474,21 +467,19 @@ impl Renderer {
         self.egui_renderer.render(
             device,
             queue,
-            &self.sc_desc,
-            &frame.view,
+            encoder,
+            &self.surface_config,
+            &frame.texture.create_view(&TextureViewDescriptor::default()),
             gui,
             clipped_meshes,
         );
 
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("Command Encoder"),
-        });
-
         {
+            let view = frame.texture.create_view(&TextureViewDescriptor::default());
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("rpass: RenderPassDescriptor"),
                 color_attachments: &[RenderPassColorAttachment {
-                    view: &frame.view,
+                    view: &view,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
@@ -508,12 +499,11 @@ impl Renderer {
             // vertex range, instance range
             rpass.draw_indexed(0..self.texture_renderer.index_buffer_size, 0, 0..1);
         }
-        queue.submit(iter::once(encoder.finish()));
     }
 
     pub fn render(
         &mut self,
-        frame: &SwapChainTexture,
+        frame: &SurfaceTexture,
         device: &Device,
         queue: &Queue,
         gui: &mut Gui,
@@ -522,26 +512,31 @@ impl Renderer {
         let vb = gui.app.draw();
         // self.update_vertex_buffer_with_line_strips(device, &vb);
         self.update_vertex_buffer(device, &vb);
+        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
+            label: Some("Command Encoder"),
+        });
 
         if gui.app.recreate_pipeline {
-            let (pipeline, bind_group) =
-                Renderer::create_pipeline(&self.sc_desc, device, queue, &self.shader, &mut gui.app);
+            let (pipeline, bind_group) = Renderer::create_pipeline(
+                &self.surface_config,
+                device,
+                queue,
+                &self.shader,
+                &mut gui.app,
+            );
             self.pipeline = pipeline;
             self.matrix_bind_group = bind_group;
         }
 
         if gui.app.get_render_to_texture() {
-            self.render_texture(device, queue, frame, gui, clipped_meshes);
+            self.render_texture(device, queue, &mut encoder, frame, gui, clipped_meshes);
         } else {
-            let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-                label: Some("Command Encoder"),
-            });
-
             {
+                let view = frame.texture.create_view(&TextureViewDescriptor::default());
                 let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("rpass: RenderPassDescriptor"),
                     color_attachments: &[RenderPassColorAttachment {
-                        view: &frame.view,
+                        view: &view,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(wgpu::Color::BLACK),
@@ -555,16 +550,17 @@ impl Renderer {
                 rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
                 rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
             }
-
-            queue.submit(iter::once(encoder.finish()));
         }
+
         self.egui_renderer.render(
             device,
             queue,
-            &self.sc_desc,
-            &frame.view,
+            &mut encoder,
+            &self.surface_config,
+            &frame.texture.create_view(&TextureViewDescriptor::default()),
             gui,
             clipped_meshes,
         );
+        queue.submit(iter::once(encoder.finish()));
     }
 }

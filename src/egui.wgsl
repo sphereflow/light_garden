@@ -16,24 +16,16 @@ struct ScreenSize {
 [[group(0), binding(0)]]
 var ss: ScreenSize;
 
-fn bool_to_f32(b: bool) -> f32 {
-    if(b) {
-        return 1.0;
-    } else {
-        return 0.0;
-    }
-}
-
 fn linear_from_srgb(srgb: vec3<f32>) -> vec3<f32> {
     let bcutoff = srgb < vec3<f32>(10.31475);
-    let cutoff = vec3<f32>(bool_to_f32(bcutoff.x), bool_to_f32(bcutoff.y), bool_to_f32(bcutoff.z));
     let lower = srgb / vec3<f32>(3294.6);
     let higher = pow((srgb + vec3<f32>(14.025)) / vec3<f32>(269.025), vec3<f32>(2.4));
-    return mix(higher, lower, cutoff);
+    return select(higher, lower, bcutoff);
 }
 
 [[stage(vertex)]]
-fn vs_main([[location(0)]] a_pos: vec2<f32>,
+fn vs_main(
+	[[location(0)]] a_pos: vec2<f32>,
         [[location(1)]] a_tex_coord: vec2<f32>,
         [[location(2)]] a_color: u32,
         ) -> VertexOutput {
@@ -48,7 +40,7 @@ fn vs_main([[location(0)]] a_pos: vec2<f32>,
 
 [[group(1), binding(0)]]
 var texture: texture_2d<f32>;
-[[group(0), binding(1)]]
+[[group(1), binding(1)]]
 var r_sampler: sampler;
 
 [[stage(fragment)]]

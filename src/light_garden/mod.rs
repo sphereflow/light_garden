@@ -60,7 +60,7 @@ impl LightGarden {
                     operation: wgpu::BlendOperation::Add,
                 },
             }),
-            write_mask: wgpu::ColorWrite::ALL,
+            write_mask: wgpu::ColorWrites::ALL,
         };
         LightGarden {
             tracer: Tracer::new(&canvas_bounds),

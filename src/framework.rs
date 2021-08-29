@@ -1,7 +1,6 @@
 use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
 #[cfg(not(target_arch = "wasm32"))]
-use futures_lite::future;
 use winit::{
     dpi::LogicalSize,
     event::{self, WindowEvent},
@@ -38,10 +37,7 @@ struct Setup {
 async fn setup(title: &str, width: u32, height: u32) -> Setup {
     #[cfg(not(target_arch = "wasm32"))]
     {
-        let chrome_tracing_dir = std::env::var("WGPU_CHROME_TRACE");
-        wgpu_subscriber::initialize_default_subscriber(
-            chrome_tracing_dir.as_ref().map(std::path::Path::new).ok(),
-        );
+        env_logger::init();
     };
 
     let event_loop = EventLoop::with_user_event();
@@ -73,20 +69,17 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
 
     log::info!("Initializing the surface...");
 
-    let instance = wgpu::Instance::new(wgpu::BackendBit::all());
+    let backend = wgpu::util::backend_bits_from_env().unwrap_or(wgpu::Backends::PRIMARY);
+    let instance = wgpu::Instance::new(backend);
     let (size, surface) = unsafe {
         let size = window.inner_size();
         let surface = instance.create_surface(&window);
         (size, surface)
     };
 
-    let adapter = instance
-        .request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::HighPerformance,
-            compatible_surface: Some(&surface),
-        })
+    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, backend)
         .await
-        .expect("No suitable GPU found");
+        .expect("No suitable GPU adapters found on the system!");
 
     let optional_features = wgpu::Features::empty();
     let required_features = wgpu::Features::empty();
@@ -137,41 +130,33 @@ fn start(
         queue,
     }: Setup,
 ) {
-    let mut sc_desc = wgpu::SwapChainDescriptor {
-        usage: wgpu::TextureUsage::RENDER_ATTACHMENT,
-        format: adapter
-            .get_swap_chain_preferred_format(&surface)
+    let mut surface_config = wgpu::SurfaceConfiguration {
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        format: surface
+            .get_preferred_format(&adapter)
             .expect("Could not get preferred swap chain format"),
         width: size.width,
         height: size.height,
         present_mode: wgpu::PresentMode::Mailbox,
     };
-    let mut swap_chain = device.create_swap_chain(&surface, &sc_desc);
+    surface.configure(&device, &surface_config);
 
     log::info!("Initializing the example...");
-    let mut gui = Gui::new(&window, &sc_desc);
-    let mut renderer = Renderer::init(&sc_desc, &device, &adapter, &queue, &mut gui.app);
+    let mut gui = Gui::new(&window, &surface_config);
+    let mut renderer = Renderer::init(&surface_config, &device, &queue, &mut gui.app);
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
         *control_flow = if cfg!(feature = "metal-auto-capture") {
             ControlFlow::Exit
         } else {
-            #[cfg(not(target_arch = "wasm32"))]
-            {
-                use instant::{Duration, Instant};
-                ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(10))
-            }
-            #[cfg(target_arch = "wasm32")]
-            {
-                ControlFlow::Poll
-            }
+            ControlFlow::Poll
         };
 
         gui.platform.handle_event(&event);
 
         match event {
-            event::Event::MainEventsCleared => {
+            event::Event::RedrawEventsCleared => {
                 window.request_redraw();
             }
             event::Event::WindowEvent {
@@ -179,25 +164,26 @@ fn start(
                 ..
             } => {
                 log::info!("Resizing to {:?}", size);
-                sc_desc.width = if size.width == 0 { 1 } else { size.width };
-                sc_desc.height = if size.height == 0 { 1 } else { size.height };
-                renderer.resize(&sc_desc, &device, &queue, &mut gui.app);
-                swap_chain = device.create_swap_chain(&surface, &sc_desc);
+                println!("Resized: {:?}", size);
+                surface_config.width = size.width.max(1);
+                surface_config.height = size.height.max(1);
+                renderer.resize(&surface_config, &device, &queue, &mut gui.app);
+                surface.configure(&device, &surface_config);
             }
-            event::Event::WindowEvent { ref event, .. } => match event {
+            event::Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => {
                     *control_flow = ControlFlow::Exit;
                 }
                 _ => {
-                    gui.winit_update(event, &sc_desc);
+                    gui.winit_update(&event, &surface_config);
                 }
             },
             event::Event::RedrawRequested(_) => {
-                let frame = match swap_chain.get_current_frame() {
+                let frame = match surface.get_current_frame() {
                     Ok(frame) => frame,
                     Err(_) => {
-                        swap_chain = device.create_swap_chain(&surface, &sc_desc);
-                        swap_chain
+                        surface.configure(&device, &surface_config);
+                        surface
                             .get_current_frame()
                             .expect("Failed to acquire next swap chain texture!")
                     }
@@ -205,13 +191,13 @@ fn start(
 
                 gui.platform.begin_frame();
                 gui.update(&gui.platform.context());
-                let (_output, clipped_shapes) = gui.platform.end_frame();
+                let (_output, clipped_shapes) = gui.platform.end_frame(Some(&window));
                 let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
 
-                renderer.render(&frame.output, &device, &queue, &mut gui, &clipped_meshes); // &clipped_meshes);
+                renderer.render(&frame.output, &device, &queue, &mut gui, &clipped_meshes); 
                 if let Some(path) = gui.app.screenshot_path.take() {
                     #[cfg(not(target_arch = "wasm32"))]
-                    future::block_on(renderer.make_screenshot(
+                    pollster::block_on(renderer.make_screenshot(
                         path,
                         &device,
                         &queue,
@@ -231,7 +217,7 @@ fn start(
 
 #[cfg(not(target_arch = "wasm32"))]
 pub fn wgpu_main(width: u32, height: u32) {
-    let setup = future::block_on(setup("LightGarden", width, height));
+    let setup = pollster::block_on(setup("LightGarden", width, height));
     start(setup);
 }
 

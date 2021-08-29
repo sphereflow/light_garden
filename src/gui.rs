@@ -101,7 +101,7 @@ impl Gui {
 }
 
 impl Gui {
-    pub fn new(winit_window: &winit::window::Window, sc_desc: &wgpu::SwapChainDescriptor) -> Self {
+    pub fn new(winit_window: &winit::window::Window, surface_config: &wgpu::SurfaceConfiguration) -> Self {
         let size = winit_window.inner_size();
         let platform = Platform::new(PlatformDescriptor {
             physical_width: size.width,
@@ -113,7 +113,7 @@ impl Gui {
         let last_update_inst = Instant::now();
         let app = LightGarden::new(
             collision2d::geo::Rect::from_tlbr(1., -1., -1., 1.),
-            sc_desc.format,
+            surface_config.format,
         );
 
         Gui {
@@ -429,7 +429,7 @@ impl Gui {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
                 })
-                .changed();
+                .response.changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -441,7 +441,7 @@ impl Gui {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
                 })
-                .changed();
+                .response.changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -453,7 +453,7 @@ impl Gui {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
                 })
-                .changed();
+                .response.changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -465,7 +465,7 @@ impl Gui {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
                 })
-                .changed();
+                .response.changed();
         }
 
         let blend_ops: &[BlendOperation] = &[
@@ -485,7 +485,7 @@ impl Gui {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
                 })
-                .changed();
+                .response.changed();
         }
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
@@ -497,7 +497,7 @@ impl Gui {
                         ui.selectable_value(selected, *bf, format!("{:?}", bf));
                     });
                 })
-                .changed();
+                .response.changed();
         }
 
         self.app.recreate_pipeline |= selected_changed;
@@ -670,7 +670,7 @@ impl Gui {
     pub fn winit_update(
         &mut self,
         event: &winit::event::WindowEvent,
-        sc_desc: &wgpu::SwapChainDescriptor,
+        surface_config: &wgpu::SurfaceConfiguration,
     ) {
         use winit::event;
         use winit::event::WindowEvent;
@@ -750,10 +750,10 @@ impl Gui {
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                let aspect = sc_desc.width as f64 / sc_desc.height as f64;
+                let aspect = surface_config.width as f64 / surface_config.height as f64;
                 self.app.update_mouse_position(nalgebra::Point2::new(
-                    ((2. * position.x / (sc_desc.width as f64)) - 1.) * aspect,
-                    (2. * -position.y / (sc_desc.height as f64)) + 1.,
+                    ((2. * position.x / (surface_config.width as f64)) - 1.) * aspect,
+                    (2. * -position.y / (surface_config.height as f64)) + 1.,
                 ));
             }
             WindowEvent::MouseInput {
