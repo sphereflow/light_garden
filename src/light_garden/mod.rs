@@ -110,55 +110,63 @@ impl LightGarden {
     pub fn update(&mut self) {
         match self.mode {
             Mode::DrawMirrorEnd { start } => {
-                self.tracer.drawing_object = Some(Object::new_mirror(start, self.mouse_pos));
+                self.tracer
+                    .add_drawing_object(Object::new_mirror(start, self.mouse_pos));
             }
 
             Mode::DrawCircleEnd { start } => {
-                self.tracer.drawing_object =
-                    Some(Object::new_circle(start, distance(&start, &self.mouse_pos)));
+                self.tracer.add_drawing_object(Object::new_circle(
+                    start,
+                    distance(&start, &self.mouse_pos),
+                ));
             }
 
             Mode::DrawRectEnd { start } => {
                 let vdiff_t2 = 2. * (self.mouse_pos - start);
                 let width = vdiff_t2[0].abs();
                 let height = vdiff_t2[1].abs();
-                self.tracer.drawing_object = Some(Object::new_rect(start, width, height));
+                self.tracer
+                    .add_drawing_object(Object::new_rect(start, width, height));
             }
 
             Mode::DrawPointLight => {
-                self.tracer.drawing_light = Some(Light::PointLight(PointLight::new(
-                    self.mouse_pos,
-                    self.num_rays,
-                    self.selected_color,
-                )));
+                self.tracer
+                    .add_drawing_light(Light::PointLight(PointLight::new(
+                        self.mouse_pos,
+                        self.num_rays,
+                        self.selected_color,
+                    )));
             }
 
             Mode::DrawSpotLightStart => {
-                self.tracer.drawing_light = Some(Light::SpotLight(SpotLight::new(
-                    self.mouse_pos,
-                    FRAC_PI_4,
-                    V2::new(1., 0.),
-                    self.num_rays,
-                    self.selected_color,
-                )));
+                self.tracer
+                    .add_drawing_light(Light::SpotLight(SpotLight::new(
+                        self.mouse_pos,
+                        FRAC_PI_4,
+                        V2::new(1., 0.),
+                        self.num_rays,
+                        self.selected_color,
+                    )));
             }
 
             Mode::DrawSpotLightEnd { origin } => {
-                self.tracer.drawing_light = Some(Light::SpotLight(SpotLight::new(
-                    origin,
-                    FRAC_PI_4,
-                    self.mouse_pos - origin,
-                    self.num_rays,
-                    self.selected_color,
-                )));
+                self.tracer
+                    .add_drawing_light(Light::SpotLight(SpotLight::new(
+                        origin,
+                        FRAC_PI_4,
+                        self.mouse_pos - origin,
+                        self.num_rays,
+                        self.selected_color,
+                    )));
             }
 
             Mode::DrawDirectionalLightEnd { start } => {
-                self.tracer.drawing_light = Some(Light::DirectionalLight(DirectionalLight::new(
-                    self.selected_color,
-                    self.num_rays,
-                    LineSegment::from_ab(start, self.mouse_pos),
-                )));
+                self.tracer
+                    .add_drawing_light(Light::DirectionalLight(DirectionalLight::new(
+                        self.selected_color,
+                        self.num_rays,
+                        LineSegment::from_ab(start, self.mouse_pos),
+                    )));
             }
 
             Mode::Rotate => {
@@ -215,14 +223,14 @@ impl LightGarden {
                 self.selected_object = None;
                 self.selected_light = None;
                 let mut min_distance = Float::MAX;
-                for (ix, o) in self.tracer.objects.iter().enumerate() {
+                for (ix, o) in self.tracer.object_iterator().enumerate() {
                     let dist = o.distance(&self.mouse_pos);
                     if dist < min_distance {
                         min_distance = dist;
                         self.selected_object = Some(ix);
                     }
                 }
-                for (ix, l) in self.tracer.lights.iter().enumerate() {
+                for (ix, l) in self.tracer.light_iterator().enumerate() {
                     let dist = distance(&l.get_origin(), &self.mouse_pos);
                     if dist < min_distance {
                         min_distance = dist;
@@ -238,7 +246,7 @@ impl LightGarden {
                     let mut min_distance = Float::MAX;
                     let mut click_selected = None;
                     // find closest object
-                    for (ix, o) in self.tracer.objects.iter().enumerate() {
+                    for (ix, o) in self.tracer.object_iterator().enumerate() {
                         let dist = o.distance(&self.mouse_pos);
                         if dist < min_distance {
                             min_distance = dist;
@@ -251,16 +259,17 @@ impl LightGarden {
                             self.mode = Mode::Selected;
                             return;
                         } else {
-                            let geo_a = self.tracer.objects[current_ix].get_geometry();
-                            let geo_b = self.tracer.objects[click_ix].get_geometry();
+                            let geo_a = self.tracer.index_object(current_ix).get_geometry();
+                            let geo_b = self.tracer.index_object(click_ix).get_geometry();
                             let geo = match op {
                                 LogicOp::And => geo_a & geo_b,
                                 LogicOp::Or => geo_a | geo_b,
                                 LogicOp::AndNot => geo_a.and_not(geo_b),
                             };
-                            self.tracer.objects[current_ix.min(click_ix)] = Object::new_geo(geo);
+                            *self.tracer.index_object(current_ix.min(click_ix)) =
+                                Object::new_geo(geo);
                             // current_ix != click_ix
-                            self.tracer.objects.remove(current_ix.max(click_ix));
+                            self.tracer.remove_object(current_ix.max(click_ix));
                             self.mode = Mode::Selected;
                             self.selected_object = Some(current_ix.min(click_ix));
                         }
@@ -282,12 +291,13 @@ impl LightGarden {
             Mode::EditObject => {}
 
             Mode::DrawPointLight => {
-                self.tracer.lights.push(Light::PointLight(PointLight::new(
-                    self.mouse_pos,
-                    self.num_rays,
-                    self.selected_color,
-                )));
-                self.tracer.drawing_light = None;
+                self.tracer
+                    .add_drawing_light(Light::PointLight(PointLight::new(
+                        self.mouse_pos,
+                        self.num_rays,
+                        self.selected_color,
+                    )));
+                self.tracer.finish_drawing_light(false);
                 self.mode = Mode::Selecting(None);
             }
 
@@ -298,14 +308,15 @@ impl LightGarden {
             }
 
             Mode::DrawSpotLightEnd { origin } => {
-                self.tracer.lights.push(Light::SpotLight(SpotLight::new(
-                    origin,
-                    std::f64::consts::FRAC_PI_4,
-                    self.mouse_pos - origin,
-                    self.num_rays,
-                    self.selected_color,
-                )));
-                self.tracer.drawing_light = None;
+                self.tracer
+                    .add_drawing_light(Light::SpotLight(SpotLight::new(
+                        origin,
+                        std::f64::consts::FRAC_PI_4,
+                        self.mouse_pos - origin,
+                        self.num_rays,
+                        self.selected_color,
+                    )));
+                self.tracer.finish_drawing_light(false);
                 self.mode = Mode::Selecting(None);
             }
 
@@ -317,13 +328,12 @@ impl LightGarden {
 
             Mode::DrawDirectionalLightEnd { start } => {
                 self.tracer
-                    .lights
-                    .push(Light::DirectionalLight(DirectionalLight::new(
+                    .add_drawing_light(Light::DirectionalLight(DirectionalLight::new(
                         self.selected_color,
                         self.num_rays,
                         LineSegment::from_ab(start, self.mouse_pos),
                     )));
-                self.tracer.drawing_light = None;
+                self.tracer.finish_drawing_light(false);
                 self.mode = Mode::Selecting(None);
             }
 
@@ -335,10 +345,9 @@ impl LightGarden {
 
             Mode::DrawMirrorEnd { start } => {
                 self.tracer
-                    .objects
-                    .push(Object::new_mirror(start, self.mouse_pos));
-                self.tracer.drawing_object = None;
-                self.tracer.obj_changed(self.tracer.objects.len() - 1);
+                    .add_drawing_object(Object::new_mirror(start, self.mouse_pos));
+                self.tracer.finish_drawing_object(false);
+                self.tracer.drawing_object_changed();
                 self.mode = Mode::Selecting(None);
             }
 
@@ -349,11 +358,12 @@ impl LightGarden {
             }
 
             Mode::DrawCircleEnd { start } => {
-                self.tracer
-                    .objects
-                    .push(Object::new_circle(start, distance(&start, &self.mouse_pos)));
-                self.tracer.obj_changed(self.tracer.objects.len() - 1);
-                self.tracer.drawing_object = None;
+                self.tracer.add_drawing_object(Object::new_circle(
+                    start,
+                    distance(&start, &self.mouse_pos),
+                ));
+                self.tracer.drawing_object_changed();
+                self.tracer.finish_drawing_object(false);
                 self.mode = Mode::Selecting(None);
             }
 
@@ -368,17 +378,16 @@ impl LightGarden {
                 let width = vdiff_t2[0].abs();
                 let height = vdiff_t2[1].abs();
                 self.tracer
-                    .objects
-                    .push(Object::new_rect(start, width, height));
-                self.tracer.obj_changed(self.tracer.objects.len() - 1);
-                self.tracer.drawing_object = None;
+                    .add_drawing_object(Object::new_rect(start, width, height));
+                self.tracer.drawing_object_changed();
+                self.tracer.finish_drawing_object(false);
                 self.mode = Mode::Selecting(None);
             }
 
             Mode::DrawConvexPolygon { ref mut points } => {
                 points.push(self.mouse_pos);
                 if points.len() > 2 {
-                    self.tracer.drawing_object = Some(Object::ConvexPolygon(
+                    self.tracer.add_drawing_object(Object::ConvexPolygon(
                         ConvexPolygon::new_convex_hull(points),
                         Material::default(),
                     ));
@@ -438,22 +447,18 @@ impl LightGarden {
     }
 
     pub fn clear(&mut self) {
-        self.tracer.lights = Vec::new();
-        self.tracer.objects = Vec::new();
-        self.tracer.drawing_object = None;
+        self.tracer.clear();
         self.selected_object = None;
         self.selected_light = None;
     }
 
-    pub fn clear_objects(&mut self) {
-        self.tracer.objects = Vec::new();
-        self.tracer.drawing_object = None;
-    }
-
     pub fn get_selected_object(&mut self) -> Option<&mut Object> {
         if let Some(ix) = self.selected_object {
-            self.tracer.obj_changed(ix);
-            Some(&mut self.tracer.objects[ix])
+            if self.tracer.tile_map_enabled {
+                self.tracer.obj_changed(ix);
+            }
+            let obj_ref = self.tracer.index_object(ix);
+            Some(obj_ref)
         } else {
             None
         }
@@ -461,7 +466,8 @@ impl LightGarden {
 
     pub fn get_selected_light(&mut self) -> Option<&mut Light> {
         if let Some(ix) = self.selected_light {
-            Some(&mut self.tracer.lights[ix])
+            let light_ref = self.tracer.index_light(ix);
+            Some(light_ref)
         } else {
             None
         }
@@ -469,10 +475,10 @@ impl LightGarden {
 
     pub fn delete_selected(&mut self) {
         if let Some(ix) = self.selected_light {
-            self.tracer.lights.remove(ix);
+            self.tracer.remove_light(ix);
         }
         if let Some(ix) = self.selected_object {
-            self.tracer.objects.remove(ix);
+            self.tracer.remove_object(ix);
         }
         self.deselect();
     }
@@ -480,35 +486,37 @@ impl LightGarden {
     pub fn deselect(&mut self) {
         self.selected_light = None;
         self.selected_object = None;
-        self.tracer.drawing_object = None;
-        self.tracer.drawing_light = None;
+        self.tracer.finish_drawing_object(true);
+        self.tracer.finish_drawing_light(true);
         self.mode = Mode::Selecting(None);
     }
 
     pub fn copy_selected(&mut self) {
         if let Some(ix) = self.selected_object {
-            let mut cpy = self.tracer.objects[ix].clone();
+            let mut cpy = self.tracer.index_object(ix).clone();
             let pos = cpy.get_origin();
             cpy.set_origin(pos + V2::new(0.05, 0.05));
-            self.tracer.objects.push(cpy);
+            self.tracer.push_object(cpy);
         }
         if let Some(ix) = self.selected_light {
-            let mut cpy = self.tracer.lights[ix].clone();
+            let mut cpy = self.tracer.index_light(ix).clone();
             let pos = cpy.get_origin();
             cpy.set_origin(pos + V2::new(0.05, 0.05));
-            self.tracer.lights.push(cpy);
+            self.tracer.push_light(cpy);
         }
     }
 
     pub fn mirror_on_x_axis_selected(&mut self) {
         if let Some(ix) = self.selected_object {
-            self.tracer.objects.push(self.tracer.objects[ix].mirror_y());
+            let obj = self.tracer.index_object(ix).mirror_y();
+            self.tracer.push_object(obj);
         }
     }
 
     pub fn mirror_on_y_axis_selected(&mut self) {
         if let Some(ix) = self.selected_object {
-            self.tracer.objects.push(self.tracer.objects[ix].mirror_x());
+            let obj = self.tracer.index_object(ix).mirror_x();
+            self.tracer.push_object(obj);
         }
     }
 

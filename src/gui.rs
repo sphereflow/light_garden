@@ -318,7 +318,7 @@ impl Gui {
         if ui.button("Finish").clicked() {
             self.app.mode = Mode::NoMode;
             self.ui_mode = UiMode::Add;
-            self.app.tracer.add_drawing_object();
+            self.app.tracer.finish_drawing_object(false);
         }
     }
 

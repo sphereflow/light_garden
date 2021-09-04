@@ -1,10 +1,11 @@
 use crate::light_garden::*;
+use std::slice::Iter;
 
 pub struct Tracer {
-    pub objects: Vec<Object>,
-    pub lights: Vec<Light>,
-    pub drawing_object: Option<Object>,
-    pub drawing_light: Option<Light>,
+    objects: Vec<Object>,
+    lights: Vec<Light>,
+    has_drawing_object: bool,
+    has_drawing_light: bool,
     pub max_bounce: u32,
     pub chunk_size: usize,
     pub cutoff_color: Color,
@@ -34,8 +35,8 @@ impl Tracer {
         Tracer {
             lights: vec![light],
             objects,
-            drawing_object: None,
-            drawing_light: None,
+            has_drawing_object: false,
+            has_drawing_light: false,
             max_bounce: 5,
             cutoff_color: [0.001; 4],
             chunk_size: 100,
@@ -47,21 +48,111 @@ impl Tracer {
         }
     }
 
-    pub fn add_drawing_object(&mut self) {
-        if let Some(obj) = self.drawing_object.take() {
-            self.objects.push(obj);
+    pub fn clear_objects(&mut self) {
+        self.has_drawing_object = false;
+        self.objects.clear();
+    }
+
+    pub fn clear(&mut self) {
+        self.has_drawing_object = false;
+        self.has_drawing_light = false;
+        self.objects.clear();
+        self.lights.clear();
+    }
+
+    pub fn add_drawing_object(&mut self, obj: Object) {
+        if self.has_drawing_object {
+            self.objects.pop();
+        }
+        self.has_drawing_object = true;
+        self.objects.push(obj);
+    }
+
+    pub fn finish_drawing_object(&mut self, abort: bool) {
+        if self.has_drawing_object {
+            if abort {
+                self.objects.pop();
+            }
+            self.has_drawing_object = false;
         }
     }
 
-    pub fn add_drawing_light(&mut self) {
-        if let Some(light) = self.drawing_light.take() {
+    pub fn add_drawing_light(&mut self, light: Light) {
+        if self.has_drawing_light {
+            self.lights.pop();
+        }
+        self.has_drawing_light = true;
+        self.lights.push(light);
+    }
+
+    pub fn finish_drawing_light(&mut self, abort: bool) {
+        if self.has_drawing_light {
+            if abort {
+                self.lights.pop();
+            }
+            self.has_drawing_light = false;
+        }
+    }
+
+    pub fn push_object(&mut self, object: Object) {
+        if self.has_drawing_object {
+            let dobject = self
+                .objects
+                .pop()
+                .expect("push_object: expected at least one drawing object but found an empty Vec");
+            self.objects.push(object);
+            self.objects.push(dobject);
+        } else {
+            self.objects.push(object);
+        }
+    }
+
+    pub fn push_light(&mut self, light: Light) {
+        if self.has_drawing_light {
+            let dlight = self
+                .lights
+                .pop()
+                .expect("push_light: expected at least one drawing light but found an empty Vec");
+            self.lights.push(light);
+            self.lights.push(dlight);
+        } else {
             self.lights.push(light);
         }
+    }
+
+    pub fn index_object(&mut self, ix: usize) -> &mut Object {
+        &mut self.objects[ix]
+    }
+
+    pub fn index_light(&mut self, ix: usize) -> &mut Light {
+        &mut self.lights[ix]
+    }
+
+    pub fn remove_object(&mut self, ix: usize) {
+        self.objects.remove(ix);
+    }
+
+    pub fn remove_light(&mut self, ix: usize) {
+        self.lights.remove(ix);
+    }
+
+    pub fn object_iterator(&self) -> Iter<'_, Object> {
+        self.objects.iter()
+    }
+
+    pub fn light_iterator(&self) -> Iter<'_, Light> {
+        self.lights.iter()
     }
 
     pub fn obj_changed(&mut self, obj_index: usize) {
         self.tile_map.delete_obj(obj_index);
         self.tile_map.add_obj(obj_index, &self.objects[obj_index]);
+    }
+
+    pub fn drawing_object_changed(&mut self) {
+        if self.has_drawing_object {
+            self.obj_changed(self.objects.len() - 1);
+        }
     }
 
     pub fn resize(&mut self, bounds: &Rect) {
@@ -78,9 +169,6 @@ impl Tracer {
     }
 
     pub fn trace_all_reflective(&mut self) -> Vec<(Vec<P2>, Color)> {
-        if let Some(dro) = self.drawing_object.clone() {
-            self.objects.push(dro);
-        }
         let mut all_line_strips: Vec<(Vec<P2>, Color)> = Vec::new();
         for light in self.lights.iter() {
             #[cfg(not(target_arch = "wasm32"))]
@@ -120,9 +208,6 @@ impl Tracer {
                 all_line_strips.extend(line_strips);
             };
         }
-        if self.drawing_object.is_some() {
-            self.objects.pop();
-        }
         all_line_strips
     }
 
@@ -161,12 +246,6 @@ impl Tracer {
 
     pub fn trace_all(&mut self) -> Vec<(P2, Color)> {
         let instant_start = Instant::now();
-        if let Some(dro) = self.drawing_object.as_ref() {
-            self.objects.push(dro.clone());
-        }
-        if let Some(drl) = self.drawing_light.as_ref() {
-            self.lights.push(drl.clone());
-        }
         let mut all_lines: Vec<(P2, Color)> = Vec::new();
         for light in self.lights.iter() {
             let mut refractive_index = 1.;
@@ -219,12 +298,6 @@ impl Tracer {
                     .concat();
                 all_lines.extend(lines);
             };
-        }
-        if self.drawing_object.is_some() {
-            self.objects.pop();
-        }
-        if self.drawing_light.is_some() {
-            self.lights.pop();
         }
 
         // fill limit testing
@@ -307,18 +380,15 @@ impl Tracer {
                     }
                 } else {
                     for (index, obj) in self.objects.iter().enumerate() {
-                            if let Some(intersections) =
-                                ray.intersect(&obj.get_geometry())
-                            {
-                                for (intersection, normal) in intersections {
-                                    let dist_sq =
-                                        distance_squared(&ray.get_origin(), &intersection);
-                                    if dist_sq < nearest {
-                                        nearest = dist_sq;
-                                        nearest_target = Some((intersection, normal, index));
-                                    }
+                        if let Some(intersections) = ray.intersect(&obj.get_geometry()) {
+                            for (intersection, normal) in intersections {
+                                let dist_sq = distance_squared(&ray.get_origin(), &intersection);
+                                if dist_sq < nearest {
+                                    nearest = dist_sq;
+                                    nearest_target = Some((intersection, normal, index));
                                 }
                             }
+                        }
                     }
                 }
 
