@@ -1,6 +1,5 @@
 use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
-#[cfg(not(target_arch = "wasm32"))]
 use winit::{
     dpi::LogicalSize,
     event::{self, WindowEvent},
