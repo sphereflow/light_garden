@@ -10,7 +10,7 @@ resolver = "2"
 [dependencies]
 nalgebra = "0.27"
 rayon = "1.5"
-wgpu = { version = "0.10", features = ["webgl"] }
+wgpu = { version = "0.10" }
 bytemuck = { version = "1.4", features = ["derive"] }
 log = "0.4"
 chrono = "0.4"
