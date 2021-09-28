@@ -270,10 +270,7 @@ impl Renderer {
         );
     }
 
-    fn render_to_texture(&mut self, device: &Device, queue: &Queue) {
-        let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
-            label: Some("render to texture command encoder"),
-        });
+    fn render_to_texture(&mut self, encoder: &mut CommandEncoder) {
         {
             let view = self
                 .texture_renderer
@@ -296,7 +293,6 @@ impl Renderer {
             rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
             rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
         }
-        queue.submit(iter::once(encoder.finish()));
     }
 
     pub async fn make_screenshot(
@@ -443,7 +439,7 @@ impl Renderer {
         clipped_meshes: &[ClippedMesh],
     ) {
         self.clear_render_texture(queue);
-        self.render_to_texture(device, queue);
+        self.render_to_texture(encoder);
         if gui.app.recreate_pipeline {
             let (pipeline, _bind_group_layout, bind_group, _sampler) =
                 TextureRenderer::create_pipeline(
