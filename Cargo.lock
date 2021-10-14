@@ -1086,7 +1086,7 @@ checksum = "c7d73b3f436185384286bd8098d17ec07c9a7d2388a6599f824d8502b529702a"
 
 [[package]]
 name = "light_garden"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "async-executor",
  "bitvec",
