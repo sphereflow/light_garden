@@ -136,7 +136,7 @@ fn start(
             .expect("Could not get preferred swap chain format"),
         width: size.width,
         height: size.height,
-        present_mode: wgpu::PresentMode::Mailbox,
+        present_mode: wgpu::PresentMode::Immediate,
     };
     surface.configure(&device, &surface_config);
 
