@@ -13,7 +13,7 @@ pub struct Tracer {
     pub canvas_bounds: Rect,
     pub trace_time_vd: VecDeque<f64>,
     tile_map: TileMap,
-    pub tile_map_enabled: bool,
+    pub debug_key_pressed: bool,
 }
 
 impl Tracer {
@@ -21,15 +21,15 @@ impl Tracer {
         let light = Light::PointLight(PointLight::new(Point2::new(-0.1, 0.1), 10000, [0.01; 4]));
         let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8);
         let mut cubic1 = CubicBezier::new_sample();
-        cubic1.scale(0.5, 0.5);
-        let curved_mirror1 = Object::CurvedMirror(CurvedMirror { cubic: cubic1 });
         let mut cubic2 = CubicBezier::new_sample2();
+        cubic1.scale(0.5, 0.5);
         cubic2.scale(0.5, 0.5);
-        let curved_mirror2 = Object::CurvedMirror(CurvedMirror { cubic: cubic2 });
+        let curved_mirror1 = Object::new_curved_mirror(&cubic1);
+        let curved_mirror2 = Object::new_curved_mirror(&cubic2);
         let objects = vec![lens, curved_mirror1, curved_mirror2];
         let mut tile_map = TileMap::new(canvas_bounds.width, canvas_bounds.height, 100, 100, 8);
-        for (ix, obj) in objects.iter().enumerate() {
-            tile_map.add_obj(ix, obj);
+        for obj in objects.iter() {
+            tile_map.push_obj(obj);
         }
         println!("canvas_bounds: {:?}", canvas_bounds);
         Tracer {
@@ -44,13 +44,14 @@ impl Tracer {
             canvas_bounds: *canvas_bounds,
             trace_time_vd: VecDeque::new(),
             tile_map,
-            tile_map_enabled: true,
+            debug_key_pressed: false,
         }
     }
 
     pub fn clear_objects(&mut self) {
         self.has_drawing_object = false;
         self.objects.clear();
+        self.tile_map.clear_tiles();
     }
 
     pub fn clear(&mut self) {
@@ -58,19 +59,23 @@ impl Tracer {
         self.has_drawing_light = false;
         self.objects.clear();
         self.lights.clear();
+        self.tile_map.clear_tiles();
     }
 
     pub fn add_drawing_object(&mut self, obj: Object) {
         if self.has_drawing_object {
+            self.tile_map.pop_obj();
             self.objects.pop();
         }
         self.has_drawing_object = true;
+        self.tile_map.push_obj(&obj);
         self.objects.push(obj);
     }
 
     pub fn finish_drawing_object(&mut self, abort: bool) {
         if self.has_drawing_object {
             if abort {
+                self.tile_map.pop_obj();
                 self.objects.pop();
             }
             self.has_drawing_object = false;
@@ -96,13 +101,17 @@ impl Tracer {
 
     pub fn push_object(&mut self, object: Object) {
         if self.has_drawing_object {
+            self.tile_map.pop_obj();
             let dobject = self
                 .objects
                 .pop()
                 .expect("push_object: expected at least one drawing object but found an empty Vec");
+            self.tile_map.push_obj(&object);
             self.objects.push(object);
+            self.tile_map.push_obj(&dobject);
             self.objects.push(dobject);
         } else {
+            self.tile_map.push_obj(&object);
             self.objects.push(object);
         }
     }
@@ -128,8 +137,14 @@ impl Tracer {
         &mut self.lights[ix]
     }
 
+    pub fn replace_object(&mut self, ix: usize, mut object: Object) {
+        self.tile_map.update_object(ix, &mut object);
+        self.objects[ix] = object;
+    }
+
     pub fn remove_object(&mut self, ix: usize) {
         self.objects.remove(ix);
+        self.tile_map.remove_object(ix);
     }
 
     pub fn remove_light(&mut self, ix: usize) {
@@ -145,8 +160,8 @@ impl Tracer {
     }
 
     pub fn obj_changed(&mut self, obj_index: usize) {
-        self.tile_map.delete_obj(obj_index);
-        self.tile_map.add_obj(obj_index, &self.objects[obj_index]);
+        self.tile_map
+            .update_object(obj_index, &mut self.objects[obj_index]);
     }
 
     pub fn drawing_object_changed(&mut self) {
@@ -155,12 +170,55 @@ impl Tracer {
         }
     }
 
+    pub fn update_tile_map(&mut self) {
+        for (ix, obj) in self.objects.iter_mut().enumerate() {
+            self.tile_map.update_object(ix, obj);
+        }
+    }
+
+    pub fn enable_tile_map(&mut self, enable: bool) {
+        if enable {
+            self.tile_map.clear_tiles();
+            for obj in self.objects.iter_mut() {
+                obj.moved = true;
+            }
+            self.update_tile_map();
+        }
+        self.tile_map.tile_map_enabled = enable;
+    }
+
+    pub fn new_tile_map(&mut self, num_tiles_x: usize, num_tiles_y: usize, num_slabs: usize) {
+        let mut tile_map = TileMap::new(
+            self.canvas_bounds.width,
+            self.canvas_bounds.height,
+            num_tiles_x,
+            num_tiles_y,
+            num_slabs,
+        );
+        for obj in self.objects.iter() {
+            tile_map.push_obj(obj);
+        }
+        self.tile_map = tile_map;
+    }
+
+    pub fn tile_map_enabled(&self) -> bool {
+        self.tile_map.tile_map_enabled
+    }
+
+    pub fn get_tile_map(&self) -> &TileMap {
+        &self.tile_map
+    }
+
+    pub fn get_tile(&self, pos: &P2) -> Option<&Tile> {
+        self.tile_map.get_tile(pos)
+    }
+
     pub fn resize(&mut self, bounds: &Rect) {
         self.canvas_bounds = *bounds;
         self.grid.update_canvas_bounds(bounds);
-        self.tile_map = TileMap::new(bounds.width, bounds.height, 100, 100, 20);
-        for (ix, obj) in self.objects.iter().enumerate() {
-            self.tile_map.add_obj(ix, obj);
+        self.tile_map = TileMap::new(bounds.width, bounds.height, 10, 10, 8);
+        for obj in self.objects.iter() {
+            self.tile_map.push_obj(obj);
         }
     }
 
@@ -250,8 +308,8 @@ impl Tracer {
         for light in self.lights.iter() {
             let mut refractive_index = 1.;
             for obj in self.objects.iter() {
-                if let Object::Circle(c, material) = obj {
-                    if c.contains(&light.get_origin()) {
+                if obj.contains(&light.get_origin()) {
+                    if let Some(material) = obj.material_opt {
                         refractive_index = material.refractive_index;
                     }
                 }
@@ -311,7 +369,7 @@ impl Tracer {
 
         // draw control lines for cubic bezier curves
         for obj in self.objects.iter() {
-            if let Object::CurvedMirror(cm) = obj {
+            if let ObjectE::CurvedMirror(cm) = obj.object_enum {
                 let red = [1., 0., 0., 1.];
                 all_lines.push((cm.cubic.points[0], red));
                 all_lines.push((cm.cubic.points[1], red));
@@ -344,6 +402,9 @@ impl Tracer {
     ) {
         let mut trace_rays = vec![(*ray, color, refractive_index)];
         let mut back_buffer = Vec::new();
+        if self.debug_key_pressed && ray.get_direction().y == -1.0 {
+            println!("debug");
+        }
         for _ in 0..max_bounce {
             if trace_rays.is_empty() {
                 return;
@@ -356,14 +417,22 @@ impl Tracer {
                 {
                     continue;
                 }
+                let overlaps = match self
+                    .tile_map
+                    .get_tile(&ray.get_origin())
+                    .map(|tile| tile.get_overlaps())
+                {
+                    Some(o) => o,
+                    None => vec![],
+                };
 
                 // find the nearest object
                 let mut nearest: Float = std::f64::MAX;
                 // (intersection point, normal, object index)
                 let mut nearest_target: Option<(P2, Normal, usize)> = None;
-                if self.tile_map_enabled {
+                if self.tile_map.tile_map_enabled {
                     if let Some(slab) = self.tile_map.index(ray) {
-                        for index in &slab.obj_indices {
+                        for index in slab.object_index_iterator().chain(overlaps.iter()) {
                             if let Some(intersections) =
                                 ray.intersect(&self.objects[*index].get_geometry())
                             {
@@ -394,67 +463,59 @@ impl Tracer {
 
                 if let Some((intersection, normal, index)) = nearest_target {
                     let obj = &self.objects[index];
-                    match obj {
-                        Object::StraightMirror(_) | Object::CurvedMirror(_) => {
-                            rays.push((ray.get_origin(), *color));
-                            rays.push((intersection, *color));
-                            back_buffer.push((
-                                ray.reflect(&intersection, &normal),
-                                *color,
-                                *refractive_index,
-                            ));
-                        }
-
-                        Object::Rect(_, material)
-                        | Object::Circle(_, material)
-                        | Object::Lens(_, material)
-                        | Object::ConvexPolygon(_, material)
-                        | Object::Geo(_, material) => {
-                            // get the refracted rays refractive_index
-                            let mut refracted_refractive_index = 1.; // air
-                            if obj.contains(&ray.get_origin()) {
-                                for (ix, o) in self.objects.iter().enumerate() {
-                                    if ix != index && o.contains(&intersection) {
-                                        if let Some(material) = o.get_material() {
-                                            refracted_refractive_index = material.refractive_index;
-                                            break;
-                                        }
+                    if let Some(material) = obj.material_opt {
+                        // get the refracted rays refractive_index
+                        let mut refracted_refractive_index = 1.; // air
+                        if obj.contains(&ray.get_origin()) {
+                            for (ix, o) in self.objects.iter().enumerate() {
+                                if ix != index && o.contains(&intersection) {
+                                    if let Some(material) = o.get_material() {
+                                        refracted_refractive_index = material.refractive_index;
+                                        break;
                                     }
                                 }
-                            } else {
-                                refracted_refractive_index = material.refractive_index;
                             }
-
-                            let result = ray.refract(
-                                &intersection,
-                                &normal,
-                                *refractive_index,
-                                refracted_refractive_index,
-                            );
-                            let (reflected, orefracted, reflectance) = result;
-                            rays.push((ray.get_origin(), *color));
-                            rays.push((reflected.get_origin(), *color));
-
-                            let refl = reflectance as f32;
-                            let omrefl = 1. - refl;
-                            let reflected_color =
-                                [color[0] * refl, color[1] * refl, color[2] * refl, color[3]];
-                            let refracted_color = [
-                                color[0] * omrefl,
-                                color[1] * omrefl,
-                                color[2] * omrefl,
-                                color[3],
-                            ];
-                            back_buffer.push((reflected, reflected_color, *refractive_index));
-                            // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
-                            if let Some(refracted) = orefracted {
-                                back_buffer.push((
-                                    refracted,
-                                    refracted_color,
-                                    refracted_refractive_index,
-                                ));
-                            }
+                        } else {
+                            refracted_refractive_index = material.refractive_index;
                         }
+
+                        let result = ray.refract(
+                            &intersection,
+                            &normal,
+                            *refractive_index,
+                            refracted_refractive_index,
+                        );
+                        let (reflected, orefracted, reflectance) = result;
+                        rays.push((ray.get_origin(), *color));
+                        rays.push((reflected.get_origin(), *color));
+
+                        let refl = reflectance as f32;
+                        let omrefl = 1. - refl;
+                        let reflected_color =
+                            [color[0] * refl, color[1] * refl, color[2] * refl, color[3]];
+                        let refracted_color = [
+                            color[0] * omrefl,
+                            color[1] * omrefl,
+                            color[2] * omrefl,
+                            color[3],
+                        ];
+                        back_buffer.push((reflected, reflected_color, *refractive_index));
+                        // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
+                        if let Some(refracted) = orefracted {
+                            back_buffer.push((
+                                refracted,
+                                refracted_color,
+                                refracted_refractive_index,
+                            ));
+                        }
+                    } else {
+                        rays.push((ray.get_origin(), *color));
+                        rays.push((intersection, *color));
+                        back_buffer.push((
+                            ray.reflect(&intersection, &normal),
+                            *color,
+                            *refractive_index,
+                        ));
                     }
                 } else {
                     // handle canvas bounds

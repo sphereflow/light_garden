@@ -1,4 +1,6 @@
 use crate::light_garden::*;
+use std::fmt::{Display, Formatter, Result};
+use std::slice::Iter;
 
 // tiles go from the top left in rows to the bottom right
 #[derive(Clone, PartialEq, Debug)]
@@ -9,6 +11,7 @@ pub struct TileMap {
     num_tilesy: usize,
     num_slabs: usize,
     pub tiles: Vec<Tile>,
+    pub tile_map_enabled: bool,
 }
 
 impl TileMap {
@@ -41,7 +44,11 @@ impl TileMap {
                 for left_right in directions.windows(2) {
                     slabs.push(Slab::new(&aabb, &left_right[0], &left_right[1]));
                 }
-                tiles.push(Tile { aabb, slabs });
+                tiles.push(Tile {
+                    aabb,
+                    slabs,
+                    range_map: Vec::new(),
+                });
             }
         }
         TileMap {
@@ -51,8 +58,10 @@ impl TileMap {
             num_tilesy,
             num_slabs,
             tiles,
+            tile_map_enabled: true,
         }
     }
+
     pub fn get_aabb(
         window_width: Float,
         window_height: Float,
@@ -68,33 +77,62 @@ impl TileMap {
         Aabb::from_tlbr(bottom + stepy, left, bottom, left + stepx)
     }
 
-    pub fn add_obj(&mut self, ix: usize, obj: &Object) {
-        for tile in self.tiles.iter_mut() {
-            for slab in tile.slabs.iter_mut() {
-                if slab.overlaps(obj) {
-                    slab.obj_indices.push(ix);
-                }
+    pub fn get_num_tiles_x(&self) -> usize {
+        self.num_tilesx
+    }
+
+    pub fn get_num_tiles_y(&self) -> usize {
+        self.num_tilesy
+    }
+
+    pub fn get_num_slabs(&self) -> usize {
+        self.num_slabs
+    }
+
+    pub fn push_obj(&mut self, obj: &Object) {
+        if self.tile_map_enabled {
+            for tile in self.tiles.iter_mut() {
+                tile.push_overlap(obj);
             }
         }
     }
-    pub fn delete_obj(&mut self, ix: usize) {
-        for tile in self.tiles.iter_mut() {
-            for slab in tile.slabs.iter_mut() {
-                for i in (0..slab.obj_indices.len()).rev() {
-                    let index = slab.obj_indices[i];
-                    if index == ix {
-                        slab.obj_indices.remove(i);
-                    }
-                }
+
+    pub fn pop_obj(&mut self) {
+        if self.tile_map_enabled {
+            for tile in self.tiles.iter_mut() {
+                tile.pop_overlap();
             }
         }
     }
+
+    pub fn remove_object(&mut self, ix: usize) {
+        if self.tile_map_enabled {
+            for tile in self.tiles.iter_mut() {
+                tile.remove_overlap(ix);
+            }
+        }
+    }
+
+    pub fn update_object(&mut self, ix: usize, object: &mut Object) {
+        if object.moved && self.tile_map_enabled {
+            object.moved = false;
+            for tile in self.tiles.iter_mut() {
+                tile.update_overlap(ix, object);
+            }
+        }
+    }
+
     pub fn index(&self, ray: &Ray) -> Option<&Slab> {
-        self.get_tile(ray.get_origin())
-            .map(|tile| tile.index(ray.get_direction()))
+        if self.tile_map_enabled {
+            self.get_tile(&ray.get_origin())
+                .map(|tile| tile.index(&ray.get_direction()))
+        } else {
+            None
+        }
     }
-    pub fn get_tile(&self, pos: P2) -> Option<&Tile> {
-        let mut pos = pos;
+
+    pub fn get_tile(&self, pos: &P2) -> Option<&Tile> {
+        let mut pos = *pos;
         pos += V2::new(self.window_width * 0.5, self.window_height * 0.5);
         let stepx = self.window_width / self.num_tilesx as Float;
         let stepy = self.window_height / self.num_tilesy as Float;
@@ -106,12 +144,60 @@ impl TileMap {
             None
         }
     }
+
+    pub fn clear_tiles(&mut self) {
+        if self.tile_map_enabled {
+            for tile in self.tiles.iter_mut() {
+                tile.clear();
+            }
+        }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub struct SlabRange {
+    pub start: usize,
+    pub end: usize,
+    num_slabs: usize,
+}
+
+impl IntoIterator for SlabRange {
+    type Item = usize;
+    type IntoIter = SlabRangeIterator;
+    fn into_iter(self) -> Self::IntoIter {
+        SlabRangeIterator {
+            range: self,
+            done: false,
+        }
+    }
+}
+
+pub struct SlabRangeIterator {
+    range: SlabRange,
+    done: bool,
+}
+
+impl Iterator for SlabRangeIterator {
+    type Item = usize;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.done {
+            None
+        } else {
+            let res = Some(self.range.start);
+            if self.range.start == self.range.end {
+                self.done = true;
+            }
+            self.range.start = (self.range.start + 1) % self.range.num_slabs;
+            res
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Tile {
     pub aabb: Aabb,
     pub slabs: Vec<Slab>,
+    pub range_map: Vec<Option<SlabRange>>,
 }
 
 impl Tile {
@@ -119,24 +205,159 @@ impl Tile {
         Tile {
             aabb,
             slabs: slabs.into(),
+            range_map: Vec::new(),
         }
     }
-    pub fn index(&self, direction: U2) -> &Slab {
+
+    pub fn index(&self, direction: &U2) -> &Slab {
+        &self.slabs[self.get_index(direction)]
+    }
+
+    pub fn push_overlap(&mut self, obj: &Object) {
+        self.range_map.push(None);
+        self.update_overlap(self.range_map.len() - 1, obj);
+    }
+
+    pub fn pop_overlap(&mut self) {
+        self.remove_object_from_slabs(self.range_map.len() - 1, false);
+    }
+
+    pub fn remove_overlap(&mut self, ix: usize) {
+        self.remove_object_from_slabs(ix, false);
+    }
+
+    fn get_index(&self, direction: &U2) -> usize {
         let mut radian_angle = direction.y.acos();
         if direction.x < 0.0 {
             radian_angle = TAU - radian_angle;
         }
-        let ix = ((self.slabs.len() as Float * radian_angle / TAU) - EPSILON) as usize;
-        &self.slabs[ix]
+        ((self.slabs.len() as Float * radian_angle / TAU) - EPSILON) as usize
+    }
+
+    pub fn update_overlap(&mut self, obj_index: usize, obj: &Object) -> bool {
+        let obj_aabb = obj.get_aabb();
+        let res = obj_aabb.intersect(&self.aabb).is_some()
+            || obj_aabb.contains(&self.aabb.get_origin())
+            || self.aabb.contains(&obj_aabb.get_origin());
+        if res {
+            // the object overlaps self.aabb
+            self.remove_object_from_slabs(obj_index, true);
+            self.range_map[obj_index] = None;
+        } else {
+            // object is outside of self.aabb
+            self.update_object(obj_index, obj);
+        }
+        res
+    }
+
+    /// this function calculates the objects ```SlabRange``` and puts it
+    /// into the tiles range map.
+    /// this function should only be called by update_overlap
+    fn update_object(&mut self, obj_index: usize, obj: &Object) {
+        self.range_map[obj_index] = self.get_range(&obj.get_aabb());
+        if let Some(srange) = self.range_map[obj_index] {
+            for ix in srange.into_iter() {
+                self.slabs[ix].insert_object(obj_index);
+            }
+        }
+    }
+
+    fn remove_object_from_slabs(&mut self, obj_index: usize, keep_indices: bool) {
+        for slab in self.slabs.iter_mut() {
+            slab.remove_object(obj_index, keep_indices);
+        }
+        if !keep_indices {
+            self.range_map.remove(obj_index);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.range_map.clear();
+        for slab in self.slabs.iter_mut() {
+            slab.clear();
+        }
+    }
+
+    pub fn get_overlaps(&self) -> Vec<usize> {
+        let mut res = Vec::new();
+        for (ix, does_overlap) in self
+            .range_map
+            .iter()
+            .map(|osrange| osrange.is_none())
+            .enumerate()
+        {
+            if does_overlap {
+                res.push(ix);
+            }
+        }
+        res
+    }
+
+    pub fn get_range(&self, aabb: &Aabb) -> Option<SlabRange> {
+        if let Some((left, right)) = self.aabb.get_crossover(aabb) {
+            let start = self.get_index(&left.get_direction());
+            let end = self.get_index(&right.get_direction());
+            let num_slabs = self.slabs.len();
+            if end < start {
+                if start - end < (num_slabs / 2) {
+                    Some(SlabRange {
+                        start: end,
+                        end: start,
+                        num_slabs,
+                    })
+                } else {
+                    Some(SlabRange {
+                        start,
+                        end,
+                        num_slabs,
+                    })
+                }
+            } else {
+                if end - start < (num_slabs / 2) {
+                    Some(SlabRange {
+                        start,
+                        end,
+                        num_slabs,
+                    })
+                } else {
+                    Some(SlabRange {
+                        start: end,
+                        end: start,
+                        num_slabs,
+                    })
+                }
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl Display for Tile {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(f, "Tile: overlaps: ")?;
+        for osrange in &self.range_map {
+            if osrange.is_some() {
+                write!(f, "0")?;
+            } else {
+                write!(f, "1")?;
+            }
+        }
+        writeln!(f, "")?;
+        writeln!(f, "Slabs:")?;
+        for slab in &self.slabs {
+            writeln!(f, "{}", slab)?;
+        }
+        write!(f, "")
     }
 }
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct Slab {
-    rleft: Ray,
-    rright: Ray,
+    pub rleft: Ray,
+    pub rright: Ray,
     ls: LineSegment,
-    pub obj_indices: Vec<usize>,
+    obj_indices: Vec<usize>,
 }
 
 impl Slab {
@@ -152,12 +373,55 @@ impl Slab {
             obj_indices: Vec::new(),
         }
     }
-    pub fn overlaps(&self, obj: &Object) -> bool {
+
+    fn overlaps(&self, obj: &Object) -> bool {
         let geo = obj.get_geometry();
         between_rays(&obj.get_origin(), &self.rleft, &self.rright)
             || self.rleft.intersect(&geo).is_some()
             || self.rright.intersect(&geo).is_some()
             || geo.intersect(&self.ls).is_some()
+    }
+
+    pub fn object_index_iterator(&self) -> Iter<'_, usize> {
+        self.obj_indices.iter()
+    }
+
+    fn insert_object(&mut self, obj_index: usize) {
+        if !self.obj_indices.contains(&obj_index) {
+            self.obj_indices.push(obj_index);
+        }
+    }
+
+    fn remove_object(&mut self, obj_index: usize, keep_indices: bool) {
+        self.obj_indices.retain(|&ix| ix != obj_index);
+        if !keep_indices {
+            for ix in 0..self.obj_indices.len() {
+                if self.obj_indices[ix] > obj_index {
+                    self.obj_indices[ix] -= 1;
+                }
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        self.obj_indices.clear();
+    }
+}
+
+impl Display for Slab {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        write!(
+            f,
+            "Slab: l: ({:.2}, {:.2}), r: ({:.2}, {:.2}), indices: ",
+            self.rleft.get_direction().x,
+            self.rleft.get_direction().y,
+            self.rright.get_direction().x,
+            self.rright.get_direction().y
+        )?;
+        for val in self.obj_indices.iter() {
+            write!(f, "{}, ", *val)?;
+        }
+        write!(f, "")
     }
 }
 
@@ -233,10 +497,7 @@ impl Quadrant {
     }
 
     fn get_opposing_point(&self, aabb: &Aabb) -> P2 {
-        let l = aabb.get_left();
-        let r = aabb.get_right();
-        let t = aabb.get_top();
-        let b = aabb.get_bottom();
+        let (t, l, b, r) = aabb.get_tlbr();
         match self {
             Quadrant::Q0 => P2::new(l, b),
             Quadrant::Q1 => P2::new(l, t),

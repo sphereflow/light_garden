@@ -211,6 +211,8 @@ fn start(
         if gui.ui_mode == UiMode::Exiting {
             *control_flow = ControlFlow::Exit;
         }
+
+        gui.app.update();
     });
 }
 

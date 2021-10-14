@@ -1,6 +1,6 @@
 [package]
 name = "light_garden"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["sphereflow <johannprescher@gmx.de>"]
 edition = "2018"
 resolver = "2"
@@ -8,7 +8,7 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nalgebra = "0.27"
+nalgebra = "0.29"
 rayon = "1.5"
 wgpu = { version = "0.10" }
 bytemuck = { version = "1.4", features = ["derive"] }
@@ -21,7 +21,8 @@ winit = { version = "0.25", features = ["web-sys"] }
 cgmath = "0.17"
 instant = "0.1"
 image = "0.23"
-half = "1.7"
+half = "1.8"
+bitvec = "0.22"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 async-executor = "1.0"

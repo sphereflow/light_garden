@@ -1,6 +1,7 @@
 extern crate nalgebra as na;
 
 use collision2d::geo::*;
+pub use drawer::*;
 use grid::Grid;
 use instant::Instant;
 pub use light::*;
@@ -14,6 +15,7 @@ pub use tile_map::*;
 pub use tracer::*;
 use wgpu::BlendState;
 
+pub mod drawer;
 pub mod grid;
 pub mod light;
 pub mod object;
@@ -25,6 +27,7 @@ const MOVE_DIST: Float = 0.2;
 
 pub struct LightGarden {
     pub tracer: Tracer,
+    pub drawer: Drawer,
     mouse_pos: Point2<Float>,
     pub num_rays: u32,
     pub selected_object: Option<usize>,
@@ -64,6 +67,7 @@ impl LightGarden {
         };
         LightGarden {
             tracer: Tracer::new(&canvas_bounds),
+            drawer: Drawer::new(&canvas_bounds),
             mouse_pos: P2::new(0., 0.),
             selected_object: None,
             selected_light: None,
@@ -104,20 +108,19 @@ impl LightGarden {
             }
             self.mouse_dragged();
         }
-        self.update();
     }
 
     pub fn update(&mut self) {
-        match self.mode {
+        match &self.mode {
             Mode::DrawMirrorEnd { start } => {
                 self.tracer
-                    .add_drawing_object(Object::new_mirror(start, self.mouse_pos));
+                    .add_drawing_object(Object::new_mirror(*start, self.mouse_pos));
             }
 
             Mode::DrawCircleEnd { start } => {
                 self.tracer.add_drawing_object(Object::new_circle(
-                    start,
-                    distance(&start, &self.mouse_pos),
+                    *start,
+                    distance(start, &self.mouse_pos),
                 ));
             }
 
@@ -126,7 +129,7 @@ impl LightGarden {
                 let width = vdiff_t2[0].abs();
                 let height = vdiff_t2[1].abs();
                 self.tracer
-                    .add_drawing_object(Object::new_rect(start, width, height));
+                    .add_drawing_object(Object::new_rect(*start, width, height));
             }
 
             Mode::DrawPointLight => {
@@ -152,7 +155,7 @@ impl LightGarden {
             Mode::DrawSpotLightEnd { origin } => {
                 self.tracer
                     .add_drawing_light(Light::SpotLight(SpotLight::new(
-                        origin,
+                        *origin,
                         FRAC_PI_4,
                         self.mouse_pos - origin,
                         self.num_rays,
@@ -165,7 +168,7 @@ impl LightGarden {
                     .add_drawing_light(Light::DirectionalLight(DirectionalLight::new(
                         self.selected_color,
                         self.num_rays,
-                        LineSegment::from_ab(start, self.mouse_pos),
+                        LineSegment::from_ab(*start, self.mouse_pos),
                     )));
             }
 
@@ -180,6 +183,46 @@ impl LightGarden {
                 if let Some(Light::DirectionalLight(directional_light)) = self.get_selected_light()
                 {
                     directional_light.y_axis_look_at(&mouse_pos);
+                }
+            }
+
+            Mode::SelectTile => {
+                if let Some(tile) = self.tracer.get_tile(&self.mouse_pos) {
+                    self.drawer.draw_aabb(&tile.aabb, [1.0, 0.0, 0.0, 1.0]);
+                    for obj in self.tracer.object_iterator() {
+                        if let Some((lsa, lsb)) = tile.aabb.get_crossover(&obj.get_aabb()) {
+                            self.drawer.draw_aabb(&obj.get_aabb(), [0.5, 0.0, 0.0, 1.0]);
+                            self.drawer.draw_line_segment(&lsa, [0.0, 0.5, 0.5, 1.0]);
+                            self.drawer.draw_line_segment(&lsb, [0.5, 0.5, 0.0, 1.0]);
+                        }
+                    }
+                }
+            }
+
+            Mode::TileSelected { tile } => {
+                let slab = tile.index(&Unit::new_normalize(
+                    self.mouse_pos - tile.aabb.get_origin(),
+                ));
+                self.drawer.draw_aabb(&tile.aabb, [1.0, 0.0, 0.0, 1.0]);
+                self.drawer.draw_geo(slab.rleft, [0.0, 1.0, 0.0, 1.0]);
+                self.drawer.draw_geo(slab.rright, [0.0, 0.0, 1.0, 1.0]);
+                let mut collision_points = Vec::new();
+                for obj in self.tracer.object_iterator() {
+                    if let Some(mut points) = slab.rleft.intersect(&obj.get_geometry()) {
+                        collision_points.append(&mut points);
+                    }
+                    if let Some(mut points) = slab.rright.intersect(&obj.get_geometry()) {
+                        collision_points.append(&mut points);
+                    }
+                    if let Some(points) = slab.rleft.intersect(&obj.get_geometry().get_aabb()) {
+                        collision_points.append(&mut points.to_vec());
+                    }
+                    if let Some(points) = slab.rright.intersect(&obj.get_geometry().get_aabb()) {
+                        collision_points.append(&mut points.to_vec());
+                    }
+                }
+                for point in collision_points {
+                    self.drawer.draw_point(&point.0, [1.0, 0.0, 1.0, 1.0]);
                 }
             }
 
@@ -213,7 +256,7 @@ impl LightGarden {
         if !self.tracer.canvas_bounds.contains(&self.mouse_pos) {
             return;
         }
-        match self.mode {
+        match &mut self.mode {
             Mode::NoMode => {
                 self.selected_object = None;
                 self.selected_light = None;
@@ -266,8 +309,8 @@ impl LightGarden {
                                 LogicOp::Or => geo_a | geo_b,
                                 LogicOp::AndNot => geo_a.and_not(geo_b),
                             };
-                            *self.tracer.index_object(current_ix.min(click_ix)) =
-                                Object::new_geo(geo);
+                            self.tracer
+                                .replace_object(current_ix.min(click_ix), Object::new_geo(geo));
                             // current_ix != click_ix
                             self.tracer.remove_object(current_ix.max(click_ix));
                             self.mode = Mode::Selected;
@@ -310,9 +353,9 @@ impl LightGarden {
             Mode::DrawSpotLightEnd { origin } => {
                 self.tracer
                     .add_drawing_light(Light::SpotLight(SpotLight::new(
-                        origin,
+                        *origin,
                         std::f64::consts::FRAC_PI_4,
-                        self.mouse_pos - origin,
+                        self.mouse_pos - *origin,
                         self.num_rays,
                         self.selected_color,
                     )));
@@ -331,7 +374,7 @@ impl LightGarden {
                     .add_drawing_light(Light::DirectionalLight(DirectionalLight::new(
                         self.selected_color,
                         self.num_rays,
-                        LineSegment::from_ab(start, self.mouse_pos),
+                        LineSegment::from_ab(*start, self.mouse_pos),
                     )));
                 self.tracer.finish_drawing_light(false);
                 self.mode = Mode::Selecting(None);
@@ -345,7 +388,7 @@ impl LightGarden {
 
             Mode::DrawMirrorEnd { start } => {
                 self.tracer
-                    .add_drawing_object(Object::new_mirror(start, self.mouse_pos));
+                    .add_drawing_object(Object::new_mirror(*start, self.mouse_pos));
                 self.tracer.finish_drawing_object(false);
                 self.tracer.drawing_object_changed();
                 self.mode = Mode::Selecting(None);
@@ -359,8 +402,8 @@ impl LightGarden {
 
             Mode::DrawCircleEnd { start } => {
                 self.tracer.add_drawing_object(Object::new_circle(
-                    start,
-                    distance(&start, &self.mouse_pos),
+                    *start,
+                    distance(start, &self.mouse_pos),
                 ));
                 self.tracer.drawing_object_changed();
                 self.tracer.finish_drawing_object(false);
@@ -373,12 +416,12 @@ impl LightGarden {
                 };
             }
 
-            Mode::DrawRectEnd { start } => {
+            Mode::DrawRectEnd { ref start } => {
                 let vdiff_t2 = 2. * (self.mouse_pos - start);
                 let width = vdiff_t2[0].abs();
                 let height = vdiff_t2[1].abs();
                 self.tracer
-                    .add_drawing_object(Object::new_rect(start, width, height));
+                    .add_drawing_object(Object::new_rect(*start, width, height));
                 self.tracer.drawing_object_changed();
                 self.tracer.finish_drawing_object(false);
                 self.mode = Mode::Selecting(None);
@@ -387,12 +430,18 @@ impl LightGarden {
             Mode::DrawConvexPolygon { ref mut points } => {
                 points.push(self.mouse_pos);
                 if points.len() > 2 {
-                    self.tracer.add_drawing_object(Object::ConvexPolygon(
-                        ConvexPolygon::new_convex_hull(points),
-                        Material::default(),
-                    ));
+                    self.tracer
+                        .add_drawing_object(Object::new_convex_polygon(points));
                 }
             }
+
+            Mode::SelectTile => {
+                if let Some(tile) = self.tracer.get_tile(&self.mouse_pos) {
+                    self.mode = Mode::TileSelected { tile: tile.clone() };
+                }
+            }
+
+            Mode::TileSelected { .. } => {}
 
             Mode::StringMod => {}
         }
@@ -423,8 +472,9 @@ impl LightGarden {
                 }
                 Mode::EditObject => {
                     if let Some(obj) = self.get_selected_object() {
-                        match obj {
-                            Object::CurvedMirror(cm) => {
+                        match obj.object_enum {
+                            ObjectE::CurvedMirror(ref mut cm) => {
+                                println!("dragged on edit curved mirror");
                                 let mut min_distance = Float::MAX;
                                 let mut min_ix = 0;
                                 for (ix, point) in cm.cubic.points.iter().enumerate() {
@@ -436,7 +486,7 @@ impl LightGarden {
                                 }
                                 cm.cubic.points[min_ix] = drag_event.end;
                             }
-                            Object::Circle(_c, _m) => {}
+                            ObjectE::Circle(_c) => {}
                             _ => {}
                         }
                     }
@@ -454,7 +504,7 @@ impl LightGarden {
 
     pub fn get_selected_object(&mut self) -> Option<&mut Object> {
         if let Some(ix) = self.selected_object {
-            if self.tracer.tile_map_enabled {
+            if self.tracer.tile_map_enabled() {
                 self.tracer.obj_changed(ix);
             }
             let obj_ref = self.tracer.index_object(ix);
@@ -488,7 +538,6 @@ impl LightGarden {
         self.selected_object = None;
         self.tracer.finish_drawing_object(true);
         self.tracer.finish_drawing_light(true);
-        self.mode = Mode::Selecting(None);
     }
 
     pub fn copy_selected(&mut self) {
@@ -520,6 +569,10 @@ impl LightGarden {
         }
     }
 
+    pub fn get_mouse_pos(&self) -> P2 {
+        self.mouse_pos
+    }
+
     pub fn update_tick(&mut self, _frame_time: f64) {}
 
     pub fn get_render_to_texture(&self) -> bool {
@@ -542,7 +595,9 @@ impl LightGarden {
             }
             res
         } else {
-            self.tracer.trace_all()
+            let mut lines = self.tracer.trace_all();
+            lines.extend(self.drawer.get_lines());
+            lines
         }
     }
 }
@@ -567,7 +622,40 @@ pub enum Mode {
     DrawSpotLightEnd { origin: P2 },
     DrawDirectionalLightStart,
     DrawDirectionalLightEnd { start: P2 },
+    SelectTile,
+    TileSelected { tile: Tile },
     StringMod,
+}
+
+use std::fmt::{Display, Formatter, Result};
+
+impl Display for Mode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        match self {
+            Self::NoMode => write!(f, "NoMode"),
+            Self::Selecting(None) => write!(f, "Selecting(None)"),
+            Self::Selecting(Some(op)) => write!(f, "Selecting({:?})", op),
+            Self::Selected => write!(f, "Selected"),
+            Self::Moving => write!(f, "Moving"),
+            Self::Rotate => write!(f, "Rotate"),
+            Self::EditObject => write!(f, "EditObject"),
+            Self::DrawMirrorStart => write!(f, "DrawMirrorStart"),
+            Self::DrawMirrorEnd { start: _ } => write!(f, "DrawMirrorEnd"),
+            Self::DrawCircleStart => write!(f, "DrawCircleStart"),
+            Self::DrawCircleEnd { .. } => write!(f, "DrawCircleEnd"),
+            Self::DrawRectStart => write!(f, "DrawRectStart"),
+            Self::DrawRectEnd { .. } => write!(f, "DrawRectEnd"),
+            Self::DrawConvexPolygon { .. } => write!(f, "DrawConvexPolygon"),
+            Self::DrawPointLight => write!(f, "DrawPointLight"),
+            Self::DrawSpotLightStart => write!(f, "DrawSpotLightStart"),
+            Self::DrawSpotLightEnd { .. } => write!(f, "DrawSpotLightEnd"),
+            Self::DrawDirectionalLightStart => write!(f, "DrawDirectionalLightStart"),
+            Self::DrawDirectionalLightEnd { .. } => write!(f, "DrawDirectionalLightEnd"),
+            Self::SelectTile => write!(f, "SelectTile"),
+            Self::TileSelected { .. } => write!(f, "TileSelected"),
+            Self::StringMod => write!(f, "StringMod"),
+        }
+    }
 }
 
 #[derive(PartialEq, Debug, Clone, Copy)]

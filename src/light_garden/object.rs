@@ -1,176 +1,286 @@
 use collision2d::geo::*;
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Object {
+pub enum ObjectE {
     StraightMirror(StraightMirror),
     CurvedMirror(CurvedMirror),
-    Circle(Circle, Material),
-    Rect(Rect, Material),
-    Lens(Lens, Material),
-    ConvexPolygon(ConvexPolygon, Material),
-    Geo(Geo, Material),
+    Circle(Circle),
+    Rect(Rect),
+    Lens(Lens),
+    ConvexPolygon(ConvexPolygon),
+    Geo(Geo),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Object {
+    pub object_enum: ObjectE,
+    pub material_opt: Option<Material>,
+    pub moved: bool,
+}
+
+impl ObjectE {
+    pub fn new_mirror(a: P2, b: P2) -> Self {
+        ObjectE::StraightMirror(StraightMirror::new(LineSegment::from_ab(a, b)))
+    }
+    pub fn new_curved_mirror(cubic: &CubicBezier) -> Self {
+        ObjectE::CurvedMirror(CurvedMirror::new(*cubic))
+    }
+    pub fn new_circle(origin: P2, radius: Float) -> Self {
+        ObjectE::Circle(Circle { origin, radius })
+    }
+    pub fn new_rect(origin: P2, width: Float, height: Float) -> Self {
+        ObjectE::Rect(Rect::new(origin, Rot2::identity(), width, height))
+    }
+    pub fn new_lens(origin: P2, radius: Float, distance: Float) -> Self {
+        ObjectE::Lens(Lens::new(origin, radius, distance))
+    }
+    pub fn new_convex_polygon(points: &[P2]) -> Self {
+        ObjectE::ConvexPolygon(ConvexPolygon::new_convex_hull(points))
+    }
+    pub fn new_geo(geo: Geo) -> Self {
+        ObjectE::Geo(geo)
+    }
 }
 
 impl Object {
     pub fn new_mirror(a: P2, b: P2) -> Self {
-        Object::StraightMirror(StraightMirror::new(LineSegment::from_ab(a, b)))
-    }
-    pub fn new_circle(origin: P2, radius: Float) -> Self {
-        Object::Circle(Circle { origin, radius }, Material::default())
-    }
-    pub fn new_rect(origin: P2, width: Float, height: Float) -> Self {
-        Object::Rect(
-            Rect::new(origin, Rot2::identity(), width, height),
-            Material::default(),
-        )
-    }
-    pub fn new_lens(origin: P2, radius: Float, distance: Float) -> Self {
-        Object::Lens(Lens::new(origin, radius, distance), Material::default())
-    }
-    pub fn new_convex_polygon(points: &[P2]) -> Self {
-        Object::ConvexPolygon(ConvexPolygon::new_convex_hull(points), Material::default())
-    }
-    pub fn new_geo(geo: Geo) -> Self {
-        Object::Geo(geo, Material::default())
-    }
-    pub fn get_material(&self) -> Option<Material> {
-        match self {
-            Object::StraightMirror(_) => None,
-            Object::CurvedMirror(_) => None,
-            Object::Circle(_, m) => Some(*m),
-            Object::Rect(_, m) => Some(*m),
-            Object::Lens(_, m) => Some(*m),
-            Object::ConvexPolygon(_, m) => Some(*m),
-            Object::Geo(_, m) => Some(*m),
+        Object {
+            object_enum: ObjectE::new_mirror(a, b),
+            material_opt: None,
+            moved: true,
         }
     }
+    pub fn new_curved_mirror(cubic: &CubicBezier) -> Self {
+        Object {
+            object_enum: ObjectE::new_curved_mirror(cubic),
+            material_opt: None,
+            moved: true,
+        }
+    }
+    pub fn new_circle(origin: P2, radius: Float) -> Self {
+        Object {
+            object_enum: ObjectE::new_circle(origin, radius),
+            material_opt: Some(Material::default()),
+            moved: true,
+        }
+    }
+    pub fn new_rect(origin: P2, width: Float, height: Float) -> Self {
+        Object {
+            object_enum: ObjectE::new_rect(origin, width, height),
+            material_opt: Some(Material::default()),
+            moved: true,
+        }
+    }
+    pub fn new_lens(origin: P2, radius: Float, distance: Float) -> Self {
+        Object {
+            object_enum: ObjectE::new_lens(origin, radius, distance),
+            material_opt: Some(Material::default()),
+            moved: true,
+        }
+    }
+    pub fn new_convex_polygon(points: &[P2]) -> Self {
+        Object {
+            object_enum: ObjectE::new_convex_polygon(points),
+            material_opt: Some(Material::default()),
+            moved: true,
+        }
+    }
+    pub fn new_geo(geo: Geo) -> Self {
+        Object {
+            object_enum: ObjectE::Geo(geo),
+            material_opt: Some(Material::default()),
+            moved: true,
+        }
+    }
+    pub fn get_material(&self) -> Option<Material> {
+        self.material_opt
+    }
     pub fn material_mut(&mut self) -> Option<&mut Material> {
+        self.material_opt.as_mut()
+    }
+}
+
+impl HasOrigin for ObjectE {
+    fn get_origin(&self) -> P2 {
         match self {
-            Object::StraightMirror(_) => None,
-            Object::CurvedMirror(_) => None,
-            Object::Circle(_, m) => Some(m),
-            Object::Rect(_, m) => Some(m),
-            Object::Lens(_, m) => Some(m),
-            Object::ConvexPolygon(_, m) => Some(m),
-            Object::Geo(_, m) => Some(m),
+            ObjectE::StraightMirror(m) => m.line_segment.get_origin(),
+            ObjectE::CurvedMirror(cm) => cm.cubic.get_origin(),
+            ObjectE::Circle(c) => c.get_origin(),
+            ObjectE::Rect(r) => r.get_origin(),
+            ObjectE::Lens(l) => l.l.get_origin(),
+            ObjectE::ConvexPolygon(cp) => cp.get_origin(),
+            ObjectE::Geo(g) => g.get_origin(),
+        }
+    }
+    fn set_origin(&mut self, origin: P2) {
+        match self {
+            ObjectE::StraightMirror(m) => m.line_segment.set_origin(origin),
+            ObjectE::CurvedMirror(cm) => cm.cubic.set_origin(origin),
+            ObjectE::Circle(c) => c.set_origin(origin),
+            ObjectE::Rect(r) => r.set_origin(origin),
+            ObjectE::Lens(l) => l.l.set_origin(origin),
+            ObjectE::ConvexPolygon(cp) => cp.set_origin(origin),
+            ObjectE::Geo(g) => g.set_origin(origin),
         }
     }
 }
 
 impl HasOrigin for Object {
     fn get_origin(&self) -> P2 {
-        match self {
-            Object::StraightMirror(m) => m.line_segment.get_origin(),
-            Object::CurvedMirror(cm) => cm.cubic.get_origin(),
-            Object::Circle(c, _) => c.get_origin(),
-            Object::Rect(r, _) => r.get_origin(),
-            Object::Lens(l, _) => l.l.get_origin(),
-            Object::ConvexPolygon(cp, _) => cp.get_origin(),
-            Object::Geo(g, _) => g.get_origin(),
-        }
+        self.object_enum.get_origin()
     }
     fn set_origin(&mut self, origin: P2) {
+        self.moved = true;
+        self.object_enum.set_origin(origin);
+    }
+}
+
+impl Rotate for ObjectE {
+    fn get_rotation(&self) -> Rot2 {
         match self {
-            Object::StraightMirror(m) => m.line_segment.set_origin(origin),
-            Object::CurvedMirror(cm) => cm.cubic.set_origin(origin),
-            Object::Circle(c, _) => c.set_origin(origin),
-            Object::Rect(r, _) => r.set_origin(origin),
-            Object::Lens(l, _) => l.l.set_origin(origin),
-            Object::ConvexPolygon(cp, _) => cp.set_origin(origin),
-            Object::Geo(g, _) => g.set_origin(origin),
+            ObjectE::StraightMirror(m) => m.line_segment.get_rotation(),
+            ObjectE::CurvedMirror(cm) => cm.cubic.get_rotation(),
+            ObjectE::Circle(c) => c.get_rotation(),
+            ObjectE::Rect(r) => r.get_rotation(),
+            ObjectE::Lens(l) => l.l.get_rotation(),
+            ObjectE::ConvexPolygon(cp) => cp.get_rotation(),
+            ObjectE::Geo(g) => g.get_rotation(),
+        }
+    }
+    fn set_rotation(&mut self, rotation: &Rot2) {
+        match self {
+            ObjectE::StraightMirror(m) => m.line_segment.set_rotation(rotation),
+            ObjectE::CurvedMirror(cm) => cm.cubic.set_rotation(rotation),
+            ObjectE::Circle(c) => c.set_rotation(rotation),
+            ObjectE::Rect(r) => r.set_rotation(rotation),
+            ObjectE::Lens(l) => l.l.set_rotation(rotation),
+            ObjectE::ConvexPolygon(cp) => cp.set_rotation(rotation),
+            ObjectE::Geo(g) => g.set_rotation(rotation),
         }
     }
 }
 
 impl Rotate for Object {
     fn get_rotation(&self) -> Rot2 {
-        match self {
-            Object::StraightMirror(m) => m.line_segment.get_rotation(),
-            Object::CurvedMirror(cm) => cm.cubic.get_rotation(),
-            Object::Circle(c, _) => c.get_rotation(),
-            Object::Rect(r, _) => r.get_rotation(),
-            Object::Lens(l, _) => l.l.get_rotation(),
-            Object::ConvexPolygon(cp, _) => cp.get_rotation(),
-            Object::Geo(g, _) => g.get_rotation(),
-        }
+        self.object_enum.get_rotation()
     }
     fn set_rotation(&mut self, rotation: &Rot2) {
+        self.moved = true;
+        self.object_enum.set_rotation(rotation);
+    }
+}
+
+impl Mirror for ObjectE {
+    fn mirror_x(&self) -> Self {
         match self {
-            Object::StraightMirror(m) => m.line_segment.set_rotation(rotation),
-            Object::CurvedMirror(cm) => cm.cubic.set_rotation(rotation),
-            Object::Circle(c, _) => c.set_rotation(rotation),
-            Object::Rect(r, _) => r.set_rotation(rotation),
-            Object::Lens(l, _) => l.l.set_rotation(rotation),
-            Object::ConvexPolygon(cp, _) => cp.set_rotation(rotation),
-            Object::Geo(g, _) => g.set_rotation(rotation),
+            ObjectE::StraightMirror(m) => ObjectE::StraightMirror(m.mirror_x()),
+            ObjectE::CurvedMirror(cm) => ObjectE::CurvedMirror(cm.mirror_x()),
+            ObjectE::Circle(c) => ObjectE::Circle(c.mirror_x()),
+            ObjectE::Rect(r) => ObjectE::Rect(r.mirror_x()),
+            ObjectE::Lens(l) => ObjectE::Lens(l.mirror_x()),
+            ObjectE::ConvexPolygon(cp) => ObjectE::ConvexPolygon(cp.mirror_x()),
+            ObjectE::Geo(g) => ObjectE::Geo(g.mirror_x()),
+        }
+    }
+    fn mirror_y(&self) -> Self {
+        match self {
+            ObjectE::StraightMirror(m) => ObjectE::StraightMirror(m.mirror_y()),
+            ObjectE::CurvedMirror(cm) => ObjectE::CurvedMirror(cm.mirror_y()),
+            ObjectE::Circle(c) => ObjectE::Circle(c.mirror_y()),
+            ObjectE::Rect(r) => ObjectE::Rect(r.mirror_y()),
+            ObjectE::Lens(l) => ObjectE::Lens(l.mirror_y()),
+            ObjectE::ConvexPolygon(cp) => ObjectE::ConvexPolygon(cp.mirror_y()),
+            ObjectE::Geo(g) => ObjectE::Geo(g.mirror_y()),
         }
     }
 }
 
 impl Mirror for Object {
     fn mirror_x(&self) -> Self {
-        match self {
-            Object::StraightMirror(m) => Object::StraightMirror(m.mirror_x()),
-            Object::CurvedMirror(cm) => Object::CurvedMirror(cm.mirror_x()),
-            Object::Circle(c, material) => Object::Circle(c.mirror_x(), *material),
-            Object::Rect(r, material) => Object::Rect(r.mirror_x(), *material),
-            Object::Lens(l, material) => Object::Lens(l.mirror_x(), *material),
-            Object::ConvexPolygon(cp, material) => Object::ConvexPolygon(cp.mirror_x(), *material),
-            Object::Geo(g, material) => Object::Geo(g.mirror_x(), *material),
+        Object {
+            object_enum: self.object_enum.mirror_x(),
+            material_opt: self.material_opt,
+            moved: true,
         }
     }
     fn mirror_y(&self) -> Self {
+        Object {
+            object_enum: self.object_enum.mirror_y(),
+            material_opt: self.material_opt,
+            moved: true,
+        }
+    }
+}
+
+impl Contains for ObjectE {
+    fn contains(&self, p: &P2) -> bool {
         match self {
-            Object::StraightMirror(m) => Object::StraightMirror(m.mirror_y()),
-            Object::CurvedMirror(cm) => Object::CurvedMirror(cm.mirror_y()),
-            Object::Circle(c, material) => Object::Circle(c.mirror_y(), *material),
-            Object::Rect(r, material) => Object::Rect(r.mirror_y(), *material),
-            Object::Lens(l, material) => Object::Lens(l.mirror_y(), *material),
-            Object::ConvexPolygon(cp, material) => Object::ConvexPolygon(cp.mirror_y(), *material),
-            Object::Geo(g, material) => Object::Geo(g.mirror_y(), *material),
+            ObjectE::StraightMirror(_) => false,
+            ObjectE::CurvedMirror(_) => false,
+            ObjectE::Circle(c) => c.contains(p),
+            ObjectE::Rect(r) => r.contains(p),
+            ObjectE::Lens(l) => l.get_logic().contains(p),
+            ObjectE::ConvexPolygon(cp) => cp.contains(p),
+            ObjectE::Geo(g) => g.contains(p),
         }
     }
 }
 
 impl Contains for Object {
     fn contains(&self, p: &P2) -> bool {
+        self.object_enum.contains(p)
+    }
+}
+
+impl Distance for ObjectE {
+    fn distance(&self, p: &P2) -> Float {
         match self {
-            Object::StraightMirror(_) => false,
-            Object::CurvedMirror(_) => false,
-            Object::Circle(c, _) => c.contains(p),
-            Object::Rect(r, _) => r.contains(p),
-            Object::Lens(l, _) => l.get_logic().contains(p),
-            Object::ConvexPolygon(cp, _) => cp.contains(p),
-            Object::Geo(g, _) => g.contains(p),
+            ObjectE::StraightMirror(m) => m.line_segment.distance(p),
+            ObjectE::CurvedMirror(cm) => distance(&cm.cubic.get_origin(), p),
+            ObjectE::Circle(c) => c.distance(p),
+            ObjectE::Rect(r) => r.distance(p),
+            ObjectE::Lens(l) => l.get_logic().distance(p),
+            ObjectE::ConvexPolygon(cp) => cp.distance(p),
+            ObjectE::Geo(g) => g.distance(p),
         }
     }
 }
 
 impl Distance for Object {
     fn distance(&self, p: &P2) -> Float {
+        self.object_enum.distance(p)
+    }
+}
+
+impl HasGeometry for ObjectE {
+    fn get_geometry(&self) -> Geo {
         match self {
-            Object::StraightMirror(m) => m.line_segment.distance(p),
-            Object::CurvedMirror(cm) => distance(&cm.cubic.get_origin(), p),
-            Object::Circle(c, _) => c.distance(p),
-            Object::Rect(r, _) => r.distance(p),
-            Object::Lens(l, _) => l.get_logic().distance(p),
-            Object::ConvexPolygon(cp, _) => cp.distance(p),
-            Object::Geo(g, _) => g.distance(p),
+            ObjectE::StraightMirror(mirror) => mirror.get_geometry(),
+            ObjectE::CurvedMirror(cm) => cm.get_geometry(),
+            ObjectE::Circle(c) => Geo::GeoCircle(*c),
+            ObjectE::Rect(r) => Geo::GeoRect(*r),
+            ObjectE::Lens(l) => Geo::GeoLogic(l.get_logic()),
+            ObjectE::ConvexPolygon(cp) => Geo::GeoConvexPolygon(cp.clone()),
+            ObjectE::Geo(g) => g.clone(),
         }
     }
 }
 
 impl HasGeometry for Object {
     fn get_geometry(&self) -> Geo {
-        match self {
-            Object::StraightMirror(mirror) => mirror.get_geometry(),
-            Object::CurvedMirror(cm) => cm.get_geometry(),
-            Object::Circle(c, _material) => Geo::GeoCircle(*c),
-            Object::Rect(r, _material) => Geo::GeoRect(*r),
-            Object::Lens(l, _) => Geo::GeoLogic(l.get_logic()),
-            Object::ConvexPolygon(cp, _) => Geo::GeoConvexPolygon(cp.clone()),
-            Object::Geo(g, _) => g.clone(),
-        }
+        self.object_enum.get_geometry()
+    }
+}
+
+impl HasAabb for ObjectE {
+    fn get_aabb(&self) -> Aabb {
+        self.get_geometry().get_aabb()
+    }
+}
+
+impl HasAabb for Object {
+    fn get_aabb(&self) -> Aabb {
+        self.object_enum.get_aabb()
     }
 }
 
