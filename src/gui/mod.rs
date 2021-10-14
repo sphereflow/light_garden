@@ -1,0 +1,325 @@
+use crate::light_garden::*;
+use collision2d::geo::*;
+use egui::*;
+use egui_winit_platform::{Platform, PlatformDescriptor};
+use epi::*;
+use instant::Instant;
+use na::Complex;
+use std::f64::consts::PI;
+use wgpu::{BlendFactor, BlendOperation};
+
+mod grid;
+mod input;
+mod settings;
+mod string_mod;
+mod tile_map;
+
+pub struct Gui {
+    pub platform: Platform,
+    pub scale_factor: f32,
+    last_update_inst: Instant,
+    last_cursor: Option<Pos2>,
+    gui_contains_pointer: bool,
+    pub app: LightGarden,
+    pub ui_mode: UiMode,
+}
+
+impl Gui {
+    pub fn name(&self) -> &str {
+        "Light Garden"
+    }
+
+    pub fn update(&mut self, ctx: &CtxRef) {
+        let bdisplay_ui = matches!(
+            self.app.mode,
+            Mode::NoMode
+                | Mode::Selected
+                | Mode::Selecting(None)
+                | Mode::DrawConvexPolygon { .. }
+                | Mode::StringMod
+                | Mode::SelectTile
+                | Mode::TileSelected { .. }
+        );
+        if !bdisplay_ui {
+            self.gui_contains_pointer = false;
+        }
+        if bdisplay_ui {
+            let window = Window::new("Light Garden");
+            window
+                .default_size(Vec2::new(300.0, 100.0))
+                .show(ctx, |ui| {
+                    self.last_cursor = ui.input().pointer.interact_pos();
+                    if let Some(mouse_pos) = self.last_cursor {
+                        ui.label(format!(
+                            "Mouse Position: ({:.1},{:.1})",
+                            mouse_pos.x, mouse_pos.y
+                        ));
+                    }
+
+                    self.display_mode(ui);
+
+                    match &self.app.mode {
+                        Mode::StringMod => {
+                            self.ui_mode = UiMode::StringMod;
+                        }
+                        Mode::Selected | Mode::EditObject => {
+                            self.ui_mode = UiMode::Selected;
+                        }
+                        Mode::DrawConvexPolygon { .. } => {
+                            self.draw_convex_polygon(ui);
+                        }
+                        Mode::SelectTile => {
+                            self.select_tile(ui);
+                        }
+                        Mode::TileSelected { tile } => {
+                            self.tile_selected(ui, tile);
+                        }
+                        _ => {}
+                    }
+
+                    match self.ui_mode {
+                        UiMode::Main => {
+                            self.main(ui);
+                        }
+                        UiMode::Add => {
+                            self.add(ui);
+                        }
+                        UiMode::Selected => {
+                            self.selected(ui);
+                        }
+                        UiMode::Settings => {
+                            self.settings(ui);
+                        }
+                        UiMode::Grid => {
+                            self.grid(ui);
+                        }
+                        UiMode::TileMap => {
+                            self.tile_map(ui);
+                        }
+                        UiMode::StringMod => {
+                            self.string_mod_selector(ui);
+                            Gui::string_mod(ui, self.get_current_string_mod());
+                        }
+                        UiMode::Exiting => {}
+                    }
+
+                    let elapsed = self.last_update_inst.elapsed();
+                    ui.label(format!("Frametime: {:.2?}", elapsed));
+                    ui.label(format!(
+                        "Average Trace Time: {:.2}",
+                        self.app.tracer.get_trace_time()
+                    ));
+                    self.gui_contains_pointer = ui.ui_contains_pointer();
+                });
+        }
+
+        self.last_update_inst = Instant::now();
+    }
+}
+
+impl Gui {
+    pub fn new(
+        winit_window: &winit::window::Window,
+        surface_config: &wgpu::SurfaceConfiguration,
+    ) -> Self {
+        let size = winit_window.inner_size();
+        let platform = Platform::new(PlatformDescriptor {
+            physical_width: size.width,
+            physical_height: size.height,
+            scale_factor: winit_window.scale_factor(),
+            font_definitions: FontDefinitions::default(),
+            style: Default::default(),
+        });
+        let last_update_inst = Instant::now();
+        let app = LightGarden::new(
+            collision2d::geo::Rect::from_tlbr(1., -1., -1., 1.),
+            surface_config.format,
+        );
+
+        Gui {
+            platform,
+            scale_factor: winit_window.scale_factor() as f32,
+            last_update_inst,
+            last_cursor: None,
+            gui_contains_pointer: false,
+            app,
+            ui_mode: UiMode::new(),
+        }
+    }
+
+    fn main(&mut self, ui: &mut Ui) {
+        if ui.button("(A)dd ...").clicked() {
+            self.ui_mode = UiMode::Add;
+        }
+        if ui.button("S(e)ttings").clicked() {
+            self.ui_mode = UiMode::Settings;
+        }
+        if ui.button("Screenshot").clicked() {
+            self.app.screenshot_path = Some("screenshot.jpg".to_owned());
+        }
+        if ui.button("(G)rid").clicked() {
+            self.ui_mode = UiMode::Grid;
+        }
+        if ui.button("(T)ile Map").clicked() {
+            self.ui_mode = UiMode::TileMap;
+            self.app.mode = Mode::SelectTile;
+        }
+        if ui.button("St(r)ing mod").clicked() {
+            self.ui_mode = UiMode::StringMod;
+            self.app.mode = Mode::StringMod;
+        }
+        if ui.button("(Q)it").clicked() {
+            self.ui_mode = UiMode::Exiting;
+        }
+    }
+
+    fn display_mode(&mut self, ui: &mut Ui) {
+        ui.label(format!("App mode: {}", self.app.mode));
+        ui.label(format!("Ui mode: {:?}", self.ui_mode));
+    }
+
+    fn selected(&mut self, ui: &mut Ui) {
+        if let Some(obj) = self.app.get_selected_object() {
+            Gui::edit_object(obj, ui);
+        }
+
+        if ui.button("(E)dit").clicked() {
+            self.app.mode = Mode::EditObject;
+        }
+
+        if ui.button("(C)opy").clicked() {
+            self.app.copy_selected();
+        }
+
+        if ui.button("Mirror on (X) axis").clicked() {
+            self.app.mirror_on_x_axis_selected();
+        }
+
+        if ui.button("Mirror on (Y) axis").clicked() {
+            self.app.mirror_on_y_axis_selected();
+        }
+
+        if ui.button("(D)elete").clicked() {
+            self.app.delete_selected();
+            self.ui_mode = UiMode::Main;
+        }
+
+        self.edit(ui);
+
+        if let Some(light) = self.app.get_selected_light() {
+            Gui::edit_light(light, ui);
+        } else {
+            let ac = self.app.selected_color;
+            let mut color =
+                Color32::from(Rgba::from_rgba_premultiplied(ac[0], ac[1], ac[2], ac[3]));
+            egui::widgets::color_picker::color_edit_button_srgba(
+                ui,
+                &mut color,
+                color_picker::Alpha::OnlyBlend,
+            );
+            let rgba = Rgba::from(color);
+            self.app.selected_color = [rgba[0], rgba[1], rgba[2], rgba[3]];
+        }
+
+        if let Some(Light::SpotLight(_)) = self.app.get_selected_light() {
+            if ui.button("(R)otate").clicked() {
+                self.app.mode = Mode::Rotate;
+            }
+        }
+        if let Some(Light::DirectionalLight(_)) = self.app.get_selected_light() {
+            if ui.button("(R)otate").clicked() {
+                self.app.mode = Mode::Rotate;
+            }
+        }
+    }
+
+    fn add(&mut self, ui: &mut Ui) {
+        if self.ui_mode == UiMode::Add {
+            if ui.button("Add (P)oint Light").clicked() {
+                self.app.mode = Mode::DrawPointLight;
+            }
+            if ui.button("Add (S)pot Light").clicked() {
+                self.app.mode = Mode::DrawSpotLightStart;
+            }
+            if ui.button("Add (D)irectionalLight").clicked() {
+                self.app.mode = Mode::DrawDirectionalLightStart;
+            }
+            if ui.button("Add (R)ect").clicked() {
+                self.app.mode = Mode::DrawRectStart;
+            }
+            if ui.button("Add (C)ircle").clicked() {
+                self.app.mode = Mode::DrawCircleStart;
+            }
+            if ui.button("Add (M)irror").clicked() {
+                self.app.mode = Mode::DrawMirrorStart;
+            }
+            if ui.button("Add Con(v)ex Polygon").clicked() {
+                self.app.mode = Mode::DrawConvexPolygon { points: Vec::new() };
+            }
+        }
+    }
+
+    fn edit(&mut self, ui: &mut Ui) {
+        if self.app.get_selected_object().is_some() {
+            if ui.button("(R)otate").clicked() {
+                self.app.mode = Mode::Rotate;
+            }
+            if ui.button("(A)nd").clicked() {
+                self.app.mode = Mode::Selecting(Some(LogicOp::And));
+            }
+            if ui.button("(O)r").clicked() {
+                self.app.mode = Mode::Selecting(Some(LogicOp::Or));
+            }
+            if ui.button("And(N)ot").clicked() {
+                self.app.mode = Mode::Selecting(Some(LogicOp::AndNot));
+            }
+        }
+    }
+
+    fn draw_convex_polygon(&mut self, ui: &mut Ui) {
+        if ui.button("Finish").clicked() {
+            self.app.mode = Mode::NoMode;
+            self.ui_mode = UiMode::Add;
+            self.app.tracer.finish_drawing_object(false);
+        }
+    }
+
+    fn edit_object(object: &mut Object, ui: &mut Ui) {
+        if let Some(material) = object.material_mut() {
+            let mut whole: i32 = material.refractive_index.floor() as i32;
+            let mut frac: Float = material.refractive_index - whole as Float;
+            ui.add(Slider::new::<i32>(&mut whole, -10..=10).text("Refractive Index whole part"));
+            ui.add(
+                Slider::new::<f64>(&mut frac, -0.0..=0.999)
+                    .text("Refractive Index fractional part"),
+            );
+            material.refractive_index = whole as Float + frac;
+        }
+    }
+
+    
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum UiMode {
+    Main,
+    Add,
+    Selected,
+    Settings,
+    Grid,
+    StringMod,
+    TileMap,
+    Exiting,
+}
+
+impl UiMode {
+    pub fn new() -> UiMode {
+        UiMode::Main
+    }
+}
+
+impl Default for UiMode {
+    fn default() -> Self {
+        Self::new()
+    }
+}
