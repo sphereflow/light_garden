@@ -76,7 +76,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
         (size, surface)
     };
 
-    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, backend)
+    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, backend, Some(&surface))
         .await
         .expect("No suitable GPU adapters found on the system!");
 
@@ -178,12 +178,12 @@ fn start(
                 }
             },
             event::Event::RedrawRequested(_) => {
-                let frame = match surface.get_current_frame() {
+                let frame = match surface.get_current_texture() {
                     Ok(frame) => frame,
                     Err(_) => {
                         surface.configure(&device, &surface_config);
                         surface
-                            .get_current_frame()
+                            .get_current_texture()
                             .expect("Failed to acquire next swap chain texture!")
                     }
                 };
@@ -193,7 +193,7 @@ fn start(
                 let (_output, clipped_shapes) = gui.platform.end_frame(Some(&window));
                 let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
 
-                renderer.render(&frame.output, &device, &queue, &mut gui, &clipped_meshes); 
+                renderer.render(&frame, &device, &queue, &mut gui, &clipped_meshes); 
                 if let Some(path) = gui.app.screenshot_path.take() {
                     #[cfg(not(target_arch = "wasm32"))]
                     pollster::block_on(renderer.make_screenshot(

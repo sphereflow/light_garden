@@ -17,4 +17,4 @@ exit
 fi
 cp ./wasm_resources/* ./target/generated
 echo "wasm-bindgen"
-wasm-bindgen --out-dir target/generated --web target/wasm32-unknown-unknown/release/light_garden.wasm
+wasm-bindgen --target web --out-dir target/generated target/wasm32-unknown-unknown/release/light_garden.wasm

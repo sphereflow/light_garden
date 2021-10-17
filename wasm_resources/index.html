@@ -3,16 +3,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   </head>
-<body>
-  <script src="./spirv_cross_wrapper_glsl.js"></script>
-  <script type="module">
-    import init from "./light_garden.js";
-    window.addEventListener("load", () => {
-      const module = window.sc_internal_wrapper().then(module => {
-        window.sc_internal = module;
+  <body>
+    <script type="module">
+      import init from "./light_garden.js";
+      window.addEventListener("load", () => {
         init();
       });
-    });
-  </script>
+    </script>
   </body>
 </html>

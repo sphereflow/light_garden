@@ -9,7 +9,7 @@ struct Transform {
 };
 
 [[group(0), binding(0)]]
-var u_transform: Transform;
+var<uniform> u_transform: Transform;
 
 [[stage(vertex)]]
 fn vs_main(

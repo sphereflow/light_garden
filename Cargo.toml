@@ -10,7 +10,7 @@ resolver = "2"
 [dependencies]
 nalgebra = "0.29"
 rayon = "1.5"
-wgpu = { version = "0.10" }
+wgpu = { version = "0.11", features = ["webgl"]}
 bytemuck = { version = "1.4", features = ["derive"] }
 log = "0.4"
 chrono = "0.4"
@@ -22,7 +22,6 @@ cgmath = "0.17"
 instant = "0.1"
 image = "0.23"
 half = "1.8"
-bitvec = "0.22"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 async-executor = "1.0"
@@ -30,7 +29,7 @@ pollster = "0.2"
 env_logger = "0.8"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.74"
+wasm-bindgen = "0.2.78"
 wasm-bindgen-futures = "0.4.24"
 getrandom = { version = "0.2", features = ["js"] }
 console_error_panic_hook = "0.1.6"

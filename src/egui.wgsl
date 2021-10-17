@@ -14,7 +14,7 @@ struct ScreenSize {
     [[location(0)]] size: vec2<f32>;
 };
 [[group(0), binding(0)]]
-var ss: ScreenSize;
+var<uniform> ss: ScreenSize;
 
 fn linear_from_srgb(srgb: vec3<f32>) -> vec3<f32> {
     let bcutoff = srgb < vec3<f32>(10.31475);
