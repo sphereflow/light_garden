@@ -8,6 +8,9 @@ use na::Complex;
 use std::f64::consts::PI;
 use wgpu::{BlendFactor, BlendOperation};
 
+#[cfg(not(target_arch = "wasm32"))]
+use rfd::FileDialog;
+
 mod grid;
 mod input;
 mod settings;
@@ -168,6 +171,12 @@ impl Gui {
             self.ui_mode = UiMode::StringMod;
             self.app.mode = Mode::StringMod;
         }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.save_file(ui);
+            self.load_file(ui);
+        }
         if ui.button("(Q)it").clicked() {
             self.ui_mode = UiMode::Exiting;
         }
@@ -297,7 +306,27 @@ impl Gui {
         }
     }
 
-    
+    #[cfg(not(target_arch = "wasm32"))]
+    fn save_file(&mut self, ui: &mut Ui) {
+        if ui.button("Save ...").clicked() {
+            if let Some(path_buf) = FileDialog::new().pick_file() {
+                if let Some(path) = path_buf.to_str() {
+                    self.app.save_to_file(path);
+                }
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    fn load_file(&mut self, ui: &mut Ui) {
+        if ui.button("Load ...").clicked() {
+            if let Some(path_buf) = FileDialog::new().pick_file() {
+                if let Some(path) = path_buf.to_str() {
+                    self.app.load_from_file(path);
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]

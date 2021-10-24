@@ -37,9 +37,9 @@ impl Gui {
         // num rays
         let mut num_rays_mut = light.get_num_rays();
         let num_rays = num_rays_mut;
-        ui.add(Slider::new::<u32>(&mut num_rays_mut, 1..=30000).text("Num Rays"));
+        ui.add(Slider::new::<usize>(&mut num_rays_mut, 1..=30000).text("Num Rays"));
         if num_rays != num_rays_mut || update_light {
-            light.set_num_rays(num_rays_mut);
+            light.set_num_rays(Some(num_rays_mut));
         }
 
         // light color

@@ -1,6 +1,7 @@
 use collision2d::geo::*;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ObjectE {
     StraightMirror(StraightMirror),
     CurvedMirror(CurvedMirror),
@@ -11,7 +12,7 @@ pub enum ObjectE {
     Geo(Geo),
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Object {
     pub object_enum: ObjectE,
     pub material_opt: Option<Material>,
@@ -284,7 +285,7 @@ impl HasAabb for Object {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct StraightMirror {
     pub line_segment: LineSegment,
 }
@@ -314,7 +315,7 @@ impl HasGeometry for StraightMirror {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CurvedMirror {
     pub cubic: CubicBezier,
 }
@@ -344,7 +345,7 @@ impl HasGeometry for CurvedMirror {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Lens {
     pub l: Logic,
 }
@@ -393,7 +394,7 @@ impl HasGeometry for Lens {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Material {
     pub refractive_index: Float,
 }

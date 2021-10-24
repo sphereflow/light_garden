@@ -2,10 +2,11 @@ extern crate nalgebra as na;
 
 use collision2d::geo::*;
 use na::Vector2;
+use serde::{Serialize, Deserialize};
 
 pub type Color = [f32; 4];
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub enum Light {
     PointLight(PointLight),
     DirectionalLight(DirectionalLight),
@@ -41,15 +42,19 @@ impl Light {
             Light::SpotLight(light) => light.set_color([red, green, blue, alpha]),
         }
     }
-    pub fn set_num_rays(&mut self, num_rays: u32) {
+    pub fn set_num_rays(&mut self, num_rays: Option<usize>) {
         match self {
             Light::PointLight(l) => l.set_num_rays(num_rays),
             Light::DirectionalLight(l) => l.set_num_rays(num_rays),
             Light::SpotLight(l) => l.set_num_rays(num_rays),
         }
     }
-    pub fn get_num_rays(&self) -> u32 {
-        self.get_rays().len() as u32
+    pub fn get_num_rays(&self) -> usize {
+        match self {
+            Light::PointLight(l) => l.num_rays,
+            Light::DirectionalLight(l) => l.num_rays,
+            Light::SpotLight(l) => l.num_rays,
+        }
     }
 }
 
@@ -70,23 +75,24 @@ impl HasOrigin for Light {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct DirectionalLight {
     color: Color,
+    #[serde(skip_serializing)]
     rays: Vec<Ray>,
-    num_rays: u32,
+    num_rays: usize,
     start: LineSegment,
 }
 
 impl DirectionalLight {
-    pub fn new(color: Color, num_rays: u32, start: LineSegment) -> Self {
+    pub fn new(color: Color, num_rays: usize, start: LineSegment) -> Self {
         let mut ret = DirectionalLight {
             color,
             rays: Vec::new(),
             num_rays,
             start,
         };
-        ret.set_num_rays(num_rays);
+        ret.set_num_rays(None);
         ret
     }
 
@@ -94,12 +100,15 @@ impl DirectionalLight {
         self.color = color;
     }
 
-    pub fn set_num_rays(&mut self, num_rays: u32) {
-        self.rays = Vec::with_capacity(num_rays as usize);
+    pub fn set_num_rays(&mut self, num_rays: Option<usize>) {
+        if let Some(n) = num_rays {
+            self.num_rays = n;
+        }
+        self.rays = Vec::with_capacity(self.num_rays);
         let n = self.start.get_normal();
-        for i in 0..num_rays {
+        for i in 0..self.num_rays {
             self.rays.push(Ray::from_origin(
-                self.start.eval_at_r(-1. * i as f64 / num_rays as f64),
+                self.start.eval_at_r(-1. * i as f64 / self.num_rays as f64),
                 n.into_inner(),
             ));
         }
@@ -112,7 +121,7 @@ impl HasOrigin for DirectionalLight {
     }
     fn set_origin(&mut self, origin: P2) {
         self.start.set_origin(origin);
-        self.set_num_rays(self.rays.len() as u32);
+        self.set_num_rays(None);
     }
 }
 
@@ -122,25 +131,28 @@ impl Rotate for DirectionalLight {
     }
     fn set_rotation(&mut self, rotation: &Rot2) {
         self.start.set_rotation(rotation);
-        self.set_num_rays(self.rays.len() as u32);
+        self.set_num_rays(None);
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct PointLight {
     position: P2,
     pub color: Color,
+    #[serde(skip_serializing)]
     rays: Vec<Ray>,
+    num_rays: usize,
 }
 
 impl PointLight {
-    pub fn new(position: P2, num_rays: u32, color: Color) -> Self {
+    pub fn new(position: P2, num_rays: usize, color: Color) -> Self {
         let mut light = PointLight {
             position,
             color,
             rays: Vec::new(),
+            num_rays,
         };
-        light.set_num_rays(num_rays);
+        light.set_num_rays(None);
         light
     }
 
@@ -148,10 +160,13 @@ impl PointLight {
         self.color = color;
     }
 
-    pub fn set_num_rays(&mut self, num_rays: u32) {
-        self.rays = Vec::with_capacity(num_rays as usize);
-        for i in 0..num_rays {
-            let f = i as Float * std::f64::consts::PI * 2. / num_rays as Float;
+    pub fn set_num_rays(&mut self, num_rays: Option<usize>) {
+        if let Some(n) = num_rays {
+            self.num_rays = n;
+        }
+        self.rays = Vec::with_capacity(self.num_rays);
+        for i in 0..self.num_rays {
+            let f = i as Float * std::f64::consts::PI * 2. / self.num_rays as Float;
             let (sine, cosine) = f.sin_cos();
             self.rays
                 .push(Ray::from_origin(self.position, Vector2::new(cosine, sine)));
@@ -171,11 +186,13 @@ impl HasOrigin for PointLight {
     }
 }
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct SpotLight {
     position: P2,
     color: Color,
+    #[serde(skip_serializing)]
     rays: Vec<Ray>,
+    num_rays: usize,
     pub spot_angle: Float,
     spot_direction: V2,
 }
@@ -185,17 +202,18 @@ impl SpotLight {
         position: P2,
         spot_angle: Float,
         spot_direction: V2,
-        num_rays: u32,
+        num_rays: usize,
         color: Color,
     ) -> Self {
         let mut light = SpotLight {
             position,
             color,
             rays: Vec::new(),
+            num_rays,
             spot_angle,
             spot_direction,
         };
-        light.set_num_rays(num_rays);
+        light.set_num_rays(None);
         light
     }
 
@@ -204,8 +222,11 @@ impl SpotLight {
     }
 
     // moving counterclockwise results in a more positive angle
-    pub fn set_num_rays(&mut self, num_rays: u32) {
-        self.rays = Vec::with_capacity(num_rays as usize);
+    pub fn set_num_rays(&mut self, num_rays: Option<usize>) {
+        if let Some(n) = num_rays {
+            self.num_rays = n;
+        }
+        self.rays = Vec::with_capacity(self.num_rays);
         let direction_angle = if self.spot_direction.x.abs() < EPSILON {
             if self.spot_direction.y >= 0. {
                 std::f64::consts::PI * 0.5
@@ -216,8 +237,8 @@ impl SpotLight {
             (self.spot_direction.y / self.spot_direction.x).atan()
         };
         let min_angle = direction_angle - 0.5 * self.spot_angle;
-        for step in 1..=num_rays {
-            let angle = min_angle + (step as f64 / num_rays as f64) * self.spot_angle;
+        for step in 1..=self.num_rays {
+            let angle = min_angle + (step as f64 / self.num_rays as f64) * self.spot_angle;
             let (ydir, xdir) = angle.sin_cos();
             let sign = self.spot_direction.x.signum();
             self.rays.push(Ray::from_origin(
@@ -247,6 +268,6 @@ impl Rotate for SpotLight {
     }
     fn set_rotation(&mut self, rotation: &Rot2) {
         self.spot_direction = rotation.matrix().column(0).clone_owned();
-        self.set_num_rays(self.rays.len() as u32);
+        self.set_num_rays(None);
     }
 }

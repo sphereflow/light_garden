@@ -222,6 +222,25 @@ impl Tracer {
         }
     }
 
+    pub fn serialize(&self) -> ron::Result<String> {
+        ron::to_string(&(self.objects.clone(), self.lights.clone()))
+    }
+
+    pub fn load(&mut self, data: &str) {
+        let (objects, lights) = ron::from_str::<(Vec<Object>, Vec<Light>)>(data).expect("Could not load RON file!");
+        self.clear();
+        self.objects = objects;
+        self.lights = lights;
+        // update the tile map
+        for obj in &self.objects {
+            self.tile_map.push_obj(obj);
+        }
+        // recreate light rays
+        for light in self.lights.iter_mut() {
+            light.set_num_rays(None);
+        }
+    }
+
     pub fn get_trace_time(&self) -> f64 {
         self.trace_time_vd.iter().sum::<f64>() / self.trace_time_vd.len() as f64
     }

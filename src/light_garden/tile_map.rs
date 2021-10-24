@@ -343,7 +343,7 @@ impl Display for Tile {
                 write!(f, "1")?;
             }
         }
-        writeln!(f, "")?;
+        writeln!(f)?;
         writeln!(f, "Slabs:")?;
         for slab in &self.slabs {
             writeln!(f, "{}", slab)?;

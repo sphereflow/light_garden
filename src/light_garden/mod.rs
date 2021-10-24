@@ -29,7 +29,7 @@ pub struct LightGarden {
     pub tracer: Tracer,
     pub drawer: Drawer,
     mouse_pos: Point2<Float>,
-    pub num_rays: u32,
+    pub num_rays: usize,
     pub selected_object: Option<usize>,
     pub selected_light: Option<usize>,
     pub selected_color: Color,
@@ -65,8 +65,9 @@ impl LightGarden {
             }),
             write_mask: wgpu::ColorWrites::ALL,
         };
+        let tracer = Tracer::new(&canvas_bounds);
         LightGarden {
-            tracer: Tracer::new(&canvas_bounds),
+            tracer,
             drawer: Drawer::new(&canvas_bounds),
             mouse_pos: P2::new(0., 0.),
             selected_object: None,
@@ -599,6 +600,20 @@ impl LightGarden {
             lines.extend(self.drawer.get_lines());
             lines
         }
+    }
+
+    pub fn save_to_file(&self, path: &str) {
+        std::fs::write(
+            path,
+            self.tracer
+                .serialize()
+                .expect(&format!("Could not serialize RON file: {}", path)),
+        )
+        .expect(&format!("Could not load RON file: {}", path));
+    }
+
+    pub fn load_from_file(&self, path: &str) {
+        std::fs::read(path).expect(&format!("Could not read file: {}", path));
     }
 }
 
