@@ -113,10 +113,7 @@ impl EguiRenderer {
                     wgpu::BindGroupLayoutEntry {
                         binding: 1,
                         visibility: ShaderStages::FRAGMENT,
-                        ty: wgpu::BindingType::Sampler {
-                            filtering: true,
-                            comparison: false,
-                        },
+                        ty: wgpu::BindingType::Sampler(SamplerBindingType::Filtering),
                         count: None,
                     },
                 ],
@@ -146,13 +143,14 @@ impl EguiRenderer {
             },
             primitive: wgpu::PrimitiveState {
                 topology: wgpu::PrimitiveTopology::TriangleList,
-                clamp_depth: false,
                 conservative: false,
                 cull_mode: None,
+                unclipped_depth: false,
                 front_face: wgpu::FrontFace::default(),
                 polygon_mode: wgpu::PolygonMode::default(),
                 strip_index_format: None,
             },
+            multiview: None,
             depth_stencil: None,
             multisample: wgpu::MultisampleState {
                 alpha_to_coverage_enabled: false,

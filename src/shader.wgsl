@@ -3,7 +3,6 @@ struct VertexOutput {
     [[builtin(position)]] out_pos: vec4<f32>;
 };
 
-[[block]]
 struct Transform {
     transform: mat4x4<f32>;
 };

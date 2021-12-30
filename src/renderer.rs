@@ -130,6 +130,7 @@ impl Renderer {
                 multisample: MultisampleState {
                     ..Default::default()
                 },
+                multiview: None,
             }),
             bind_group,
         )

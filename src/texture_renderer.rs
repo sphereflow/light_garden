@@ -161,6 +161,7 @@ impl TextureRenderer {
             multisample: MultisampleState {
                 ..Default::default()
             },
+            multiview: None,
         }), bind_group_layout, bind_group, sampler)
     }
 
@@ -181,10 +182,7 @@ impl TextureRenderer {
                 wgpu::BindGroupLayoutEntry {
                     binding: 1,
                     visibility: wgpu::ShaderStages::FRAGMENT,
-                    ty: wgpu::BindingType::Sampler {
-                        comparison: false,
-                        filtering: true,
-                    },
+                    ty: BindingType::Sampler(SamplerBindingType::Filtering),
                     count: None,
                 },
             ],

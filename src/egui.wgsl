@@ -9,7 +9,6 @@ struct VertexOutput {
     [[builtin(position)]] pos: vec4<f32>;
 };
 
-[[block]]
 struct ScreenSize {
     [[location(0)]] size: vec2<f32>;
 };
