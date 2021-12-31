@@ -76,9 +76,10 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
         (size, surface)
     };
 
-    let adapter = wgpu::util::initialize_adapter_from_env_or_default(&instance, backend, Some(&surface))
-        .await
-        .expect("No suitable GPU adapters found on the system!");
+    let adapter =
+        wgpu::util::initialize_adapter_from_env_or_default(&instance, backend, Some(&surface))
+            .await
+            .expect("No suitable GPU adapters found on the system!");
 
     let optional_features = wgpu::Features::empty();
     let required_features = wgpu::Features::empty();
@@ -193,7 +194,7 @@ fn start(
                 let (_output, clipped_shapes) = gui.platform.end_frame(Some(&window));
                 let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
 
-                renderer.render(&frame, &device, &queue, &mut gui, &clipped_meshes); 
+                renderer.render(&frame, &device, &queue, &mut gui, &clipped_meshes);
                 if let Some(path) = gui.app.screenshot_path.take() {
                     #[cfg(not(target_arch = "wasm32"))]
                     pollster::block_on(renderer.make_screenshot(
