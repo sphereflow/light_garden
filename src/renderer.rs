@@ -117,7 +117,7 @@ impl Renderer {
                 fragment: Some(FragmentState {
                     module: shader,
                     entry_point: "fs_main",
-                    targets: &[app.color_state_descriptor.clone()],
+                    targets: &[Some(app.color_state_descriptor.clone())],
                 }),
                 // render lines
                 primitive: PrimitiveState {
@@ -190,7 +190,7 @@ impl Renderer {
         app: &mut LightGarden,
     ) -> Self {
         use std::borrow::Cow;
-        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Renderer: wgsl shader module"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
         });
@@ -280,14 +280,14 @@ impl Renderer {
                 .create_view(&TextureViewDescriptor::default());
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("render to texture render pass"),
-                color_attachments: &[RenderPassColorAttachment {
+                color_attachments: &[Some(RenderPassColorAttachment {
                     view: &view,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
                     },
                     resolve_target: None,
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
             rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
@@ -334,14 +334,14 @@ impl Renderer {
         {
             let mut rpass = screenshot_encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("rpass screenshot: RenderPassDescriptor"),
-                color_attachments: &[RenderPassColorAttachment {
+                color_attachments: &[Some(RenderPassColorAttachment {
                     view,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
             rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
@@ -380,10 +380,10 @@ impl Renderer {
 
         queue.submit(iter::once(screenshot_encoder.finish()));
         let buffer_slice = buff.slice(..);
-        let bytes_future = buffer_slice.map_async(MapMode::Read);
+        let bytes_future = buffer_slice.map_async(MapMode::Read, |_arg| {});
         device.poll(Maintain::Wait);
 
-        if let Ok(()) = bytes_future.await {
+        if let () = bytes_future {
             let padded_buffer = buffer_slice.get_mapped_range();
             let mut bufvec = Vec::new();
             for padded in padded_buffer.chunks(padded_bytes_per_row as usize) {
@@ -476,14 +476,14 @@ impl Renderer {
             let view = frame.texture.create_view(&TextureViewDescriptor::default());
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("rpass: RenderPassDescriptor"),
-                color_attachments: &[RenderPassColorAttachment {
+                color_attachments: &[Some(RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
 
@@ -533,14 +533,14 @@ impl Renderer {
                 let view = frame.texture.create_view(&TextureViewDescriptor::default());
                 let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                     label: Some("rpass: RenderPassDescriptor"),
-                    color_attachments: &[RenderPassColorAttachment {
+                    color_attachments: &[Some(RenderPassColorAttachment {
                         view: &view,
                         resolve_target: None,
                         ops: Operations {
                             load: LoadOp::Clear(wgpu::Color::BLACK),
                             store: true,
                         },
-                    }],
+                    })],
                     depth_stencil_attachment: None,
                 });
                 rpass.set_bind_group(0, &self.matrix_bind_group, &[]);

@@ -73,11 +73,13 @@ impl TextureRenderer {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: RENDER_TEXTURE_FORMAT,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            usage: TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST,
         });
 
         use std::borrow::Cow;
-        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("render to texture shader"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("render_to_texture.wgsl"))),
         });
@@ -149,7 +151,7 @@ impl TextureRenderer {
             fragment: Some(FragmentState {
                 module: shader,
                 entry_point: "fs_main",
-                targets: &[color_state_descriptor],
+                targets: &[Some(color_state_descriptor)],
             }),
             // render lines
             primitive: PrimitiveState {
@@ -213,7 +215,11 @@ impl TextureRenderer {
         })
     }
 
-    pub fn generate_render_texture(&mut self, device: &Device, surface_config: &SurfaceConfiguration) {
+    pub fn generate_render_texture(
+        &mut self,
+        device: &Device,
+        surface_config: &SurfaceConfiguration,
+    ) {
         let dimensions = Extent3d {
             width: surface_config.width,
             height: surface_config.height,
@@ -226,7 +232,9 @@ impl TextureRenderer {
             sample_count: 1,
             dimension: TextureDimension::D2,
             format: RENDER_TEXTURE_FORMAT,
-            usage: TextureUsages::RENDER_ATTACHMENT | TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST,
+            usage: TextureUsages::RENDER_ATTACHMENT
+                | TextureUsages::TEXTURE_BINDING
+                | TextureUsages::COPY_DST,
         });
     }
 }

@@ -132,12 +132,10 @@ fn start(
 ) {
     let mut surface_config = wgpu::SurfaceConfiguration {
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-        format: surface
-            .get_preferred_format(&adapter)
-            .expect("Could not get preferred swap chain format"),
+        format: surface.get_supported_formats(&adapter)[0],
         width: size.width,
         height: size.height,
-        present_mode: wgpu::PresentMode::Immediate,
+        present_mode: wgpu::PresentMode::Mailbox,
     };
     surface.configure(&device, &surface_config);
 

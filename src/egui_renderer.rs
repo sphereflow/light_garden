@@ -2,8 +2,8 @@ use crate::framework::cast_slice;
 use crate::gui::Gui;
 use bytemuck::{Pod, Zeroable};
 use egui::*;
-use std::sync::Arc;
 use std::num::NonZeroU32;
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::*;
 
@@ -48,7 +48,7 @@ pub struct EguiRenderer {
 impl EguiRenderer {
     pub fn init(device: &Device, output_format: TextureFormat) -> Self {
         use std::borrow::Cow;
-        let shader = device.create_shader_module(&wgpu::ShaderModuleDescriptor {
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("egui: wgsl shader module"),
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("egui.wgsl"))),
         });
@@ -160,7 +160,7 @@ impl EguiRenderer {
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
                 entry_point: "fs_main",
-                targets: &[wgpu::ColorTargetState {
+                targets: &[Some(wgpu::ColorTargetState {
                     format: output_format,
                     blend: Some(wgpu::BlendState {
                         color: wgpu::BlendComponent {
@@ -175,7 +175,7 @@ impl EguiRenderer {
                         },
                     }),
                     write_mask: wgpu::ColorWrites::ALL,
-                }],
+                })],
             }),
         });
 
@@ -433,14 +433,14 @@ impl EguiRenderer {
         {
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("egui render pass"),
-                color_attachments: &[RenderPassColorAttachment {
+                color_attachments: &[Some(RenderPassColorAttachment {
                     view: color_attachment,
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Load,
                         store: true,
                     },
-                }],
+                })],
                 depth_stencil_attachment: None,
             });
             rpass.set_pipeline(&self.render_pipeline);
@@ -455,7 +455,7 @@ impl EguiRenderer {
                 .zip(self.index_buffers.iter())
             {
                 if !EguiRenderer::set_clip_rect(
-                    clip_rect,
+                    &clip_rect,
                     scale_factor,
                     physical_width,
                     physical_height,

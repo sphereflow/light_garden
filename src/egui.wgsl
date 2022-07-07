@@ -4,15 +4,17 @@
 //};
 
 struct VertexOutput {
-    [[location(0)]] tex_coord: vec2<f32>;
-    [[location(1)]] color: vec4<f32>;
-    [[builtin(position)]] pos: vec4<f32>;
+    @location(0) tex_coord: vec2<f32>,
+    @location(1) color: vec4<f32>,
+    @builtin(position) pos: vec4<f32>,
 };
 
 struct ScreenSize {
-    [[location(0)]] size: vec2<f32>;
+    @location(0) size: vec2<f32>,
 };
-[[group(0), binding(0)]]
+
+@group(0)
+@binding(0)
 var<uniform> ss: ScreenSize;
 
 fn linear_from_srgb(srgb: vec3<f32>) -> vec3<f32> {
@@ -22,11 +24,11 @@ fn linear_from_srgb(srgb: vec3<f32>) -> vec3<f32> {
     return select(higher, lower, bcutoff);
 }
 
-[[stage(vertex)]]
+@vertex
 fn vs_main(
-	[[location(0)]] a_pos: vec2<f32>,
-        [[location(1)]] a_tex_coord: vec2<f32>,
-        [[location(2)]] a_color: u32,
+	@location(0) a_pos: vec2<f32>,
+        @location(1) a_tex_coord: vec2<f32>,
+        @location(2) a_color: u32,
         ) -> VertexOutput {
     var out: VertexOutput;
     let color = vec4<f32>(f32(a_color & 255u), f32((a_color >> 8u) & 255u), f32((a_color >> 16u) & 255u), f32((a_color >> 24u) & 255u));
@@ -37,12 +39,15 @@ fn vs_main(
     return out;
 }
 
-[[group(1), binding(0)]]
+@group(1)
+@binding(0)
 var texture: texture_2d<f32>;
-[[group(1), binding(1)]]
+
+@group(1)
+@binding(1)
 var r_sampler: sampler;
 
-[[stage(fragment)]]
-fn fs_main(in: VertexOutput) -> [[location(0)]] vec4<f32> {
+@fragment
+fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return in.color * textureSample(texture, r_sampler, in.tex_coord);
 }
