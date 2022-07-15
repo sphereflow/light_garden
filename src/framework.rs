@@ -40,8 +40,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     };
 
     let event_loop = EventLoop::with_user_event();
-    let mut builder = winit::window::WindowBuilder::new()
-        .with_inner_size(LogicalSize::new(width as f32, height as f32));
+    let mut builder = winit::window::WindowBuilder::new();
     builder = builder.with_title(title);
     #[cfg(windows_OFF)] // TODO
     {
@@ -68,7 +67,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
 
     log::info!("Initializing the surface...");
 
-    let backend = wgpu::util::backend_bits_from_env().unwrap_or(wgpu::Backends::PRIMARY);
+    let backend = wgpu::util::backend_bits_from_env().unwrap_or_else(wgpu::Backends::all);
     let instance = wgpu::Instance::new(backend);
     let (size, surface) = unsafe {
         let size = window.inner_size();
@@ -91,7 +90,13 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
     );
     println!("Features: {:?}", adapter_features);
 
-    let needed_limits = wgpu::Limits::default();
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let adapter_info = adapter.get_info();
+        println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
+    }
+
+    let needed_limits = wgpu::Limits::default().using_resolution(adapter.limits());
 
     let trace_dir = std::env::var("WGPU_TRACE");
     let (device, queue) = adapter
@@ -135,8 +140,9 @@ fn start(
         format: surface.get_supported_formats(&adapter)[0],
         width: size.width,
         height: size.height,
-        present_mode: wgpu::PresentMode::Mailbox,
+        present_mode: wgpu::PresentMode::Fifo,
     };
+    println!("Surface config: {surface_config:?}");
     surface.configure(&device, &surface_config);
 
     log::info!("Initializing the example...");
@@ -158,7 +164,12 @@ fn start(
                 window.request_redraw();
             }
             event::Event::WindowEvent {
-                event: WindowEvent::Resized(size),
+                event:
+                    WindowEvent::Resized(size)
+                    | WindowEvent::ScaleFactorChanged {
+                        new_inner_size: &mut size,
+                        ..
+                    },
                 ..
             } => {
                 log::info!("Resizing to {:?}", size);
@@ -193,6 +204,7 @@ fn start(
                 let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
 
                 renderer.render(&frame, &device, &queue, &mut gui, &clipped_meshes);
+                frame.present();
                 if let Some(path) = gui.app.screenshot_path.take() {
                     #[cfg(not(target_arch = "wasm32"))]
                     pollster::block_on(renderer.make_screenshot(
