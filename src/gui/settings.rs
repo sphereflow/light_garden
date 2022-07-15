@@ -55,7 +55,7 @@ impl Gui {
     }
 
     fn edit_blend(&mut self, ui: &mut Ui) {
-        ui.add(Slider::new::<u32>(&mut self.app.tracer.max_bounce, 1..=12).text("Max Bounce:"));
+        ui.add(Slider::new::<u32>(&mut self.app.tracer.max_bounce, 1..=20).text("Max Bounce:"));
         let blend_factors: &[BlendFactor] = &[
             BlendFactor::Zero,
             BlendFactor::One,
