@@ -1,8 +1,6 @@
 use crate::light_garden::*;
 use collision2d::geo::*;
 use egui::*;
-use egui_winit_platform::{Platform, PlatformDescriptor};
-use epi::*;
 use instant::Instant;
 use na::Complex;
 use std::f64::consts::PI;
@@ -18,7 +16,7 @@ mod string_mod;
 mod tile_map;
 
 pub struct Gui {
-    pub platform: Platform,
+    pub winit_state: egui_winit::State,
     pub scale_factor: f32,
     last_update_inst: Instant,
     last_cursor: Option<Pos2>,
@@ -32,7 +30,9 @@ impl Gui {
         "Light Garden"
     }
 
-    pub fn update(&mut self, ctx: &CtxRef) {
+    pub fn update(&mut self, ctx: &Context, winit_window: &winit::window::Window) -> FullOutput {
+        let input = self.winit_state.take_egui_input(winit_window);
+        ctx.begin_frame(input);
         let bdisplay_ui = matches!(
             self.app.mode,
             Mode::NoMode
@@ -117,30 +117,26 @@ impl Gui {
         }
 
         self.last_update_inst = Instant::now();
+        ctx.end_frame()
     }
 }
 
 impl Gui {
     pub fn new(
         winit_window: &winit::window::Window,
+        event_loop: &winit::event_loop::EventLoop<()>,
         surface_config: &wgpu::SurfaceConfiguration,
     ) -> Self {
         let size = winit_window.inner_size();
-        let platform = Platform::new(PlatformDescriptor {
-            physical_width: size.width,
-            physical_height: size.height,
-            scale_factor: winit_window.scale_factor(),
-            font_definitions: FontDefinitions::default(),
-            style: Default::default(),
-        });
         let last_update_inst = Instant::now();
         let app = LightGarden::new(
             collision2d::geo::Rect::from_tlbr(1., -1., -1., 1.),
             surface_config.format,
         );
+        let winit_state = egui_winit::State::new(&event_loop);
 
         Gui {
-            platform,
+            winit_state,
             scale_factor: winit_window.scale_factor() as f32,
             last_update_inst,
             last_cursor: None,

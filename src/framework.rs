@@ -1,5 +1,6 @@
 use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
+use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use winit::{
     dpi::LogicalSize,
     event::{self, WindowEvent},
@@ -51,6 +52,8 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
 
     #[cfg(target_arch = "wasm32")]
     {
+        let mut width = width;
+        let mut height = height;
         use winit::platform::web::WindowExtWebSys;
         console_log::init().expect("could not initialize logger");
         std::panic::set_hook(Box::new(console_error_panic_hook::hook));
@@ -59,6 +62,12 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
             .and_then(|win| win.document())
             .and_then(|doc| doc.body())
             .and_then(|body| {
+                width = body.client_width() as u32;
+                height = body.client_height() as u32;
+                window.set_inner_size(winit::dpi::PhysicalSize::new(width, height));
+                window
+                    .canvas()
+                    .set_oncontextmenu(Some(&js_sys::Function::new_no_args("return false;")));
                 body.append_child(&web_sys::Element::from(window.canvas()))
                     .ok()
             })
@@ -96,7 +105,12 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
         println!("Using {} ({:?})", adapter_info.name, adapter_info.backend);
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     let needed_limits = wgpu::Limits::default().using_resolution(adapter.limits());
+
+    #[cfg(target_arch = "wasm32")]
+    let needed_limits =
+        wgpu::Limits::downlevel_webgl2_defaults().using_resolution(adapter.limits());
 
     let trace_dir = std::env::var("WGPU_TRACE");
     let (device, queue) = adapter
@@ -146,8 +160,12 @@ fn start(
     surface.configure(&device, &surface_config);
 
     log::info!("Initializing the example...");
-    let mut gui = Gui::new(&window, &surface_config);
+    let mut gui = Gui::new(&window, &event_loop, &surface_config);
+    let context = egui::Context::default();
+    context.set_pixels_per_point(window.scale_factor() as f32);
+
     let mut renderer = Renderer::init(&surface_config, &device, &queue, &mut gui.app);
+
     log::info!("Entering render loop...");
     event_loop.run(move |event, _, control_flow| {
         let _ = (&instance, &adapter); // force ownership by the closure
@@ -156,8 +174,6 @@ fn start(
         } else {
             ControlFlow::Poll
         };
-
-        gui.platform.handle_event(&event);
 
         match event {
             event::Event::RedrawEventsCleared => {
@@ -184,6 +200,8 @@ fn start(
                     *control_flow = ControlFlow::Exit;
                 }
                 _ => {
+                    // forward events to egui
+                    gui.winit_state.on_event(&context, &event);
                     gui.winit_update(&event, &surface_config);
                 }
             },
@@ -198,12 +216,17 @@ fn start(
                     }
                 };
 
-                gui.platform.begin_frame();
-                gui.update(&gui.platform.context());
-                let (_output, clipped_shapes) = gui.platform.end_frame(Some(&window));
-                let clipped_meshes = gui.platform.context().tessellate(clipped_shapes);
+                let output = gui.update(&context, &window);
 
-                renderer.render(&frame, &device, &queue, &mut gui, &clipped_meshes);
+                renderer.render(
+                    &frame,
+                    &device,
+                    &queue,
+                    &mut gui,
+                    output,
+                    &context,
+                    window.scale_factor() as f32,
+                );
                 frame.present();
                 if let Some(path) = gui.app.screenshot_path.take() {
                     #[cfg(not(target_arch = "wasm32"))]

@@ -1,11 +1,11 @@
-use crate::egui_renderer::EguiRenderer;
 use crate::gui::Gui;
 use crate::light_garden::light::Color;
 use crate::light_garden::LightGarden;
 use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};
 use bytemuck::{Pod, Zeroable};
 use collision2d::geo::*;
-use egui::ClippedMesh;
+use egui::FullOutput;
+use egui_wgpu::renderer::ScreenDescriptor;
 use half::f16;
 use image::save_buffer_with_format;
 use std::{iter, num::NonZeroU32};
@@ -28,10 +28,10 @@ pub struct Renderer {
     vertex_buffer: Buffer,
     vertex_count: u32,
     matrix_bind_group: BindGroup,
+    egui_rpass: egui_wgpu::renderer::RenderPass,
     rebuild_bundle: bool,
     texture_renderer: TextureRenderer,
     surface_config: SurfaceConfiguration,
-    pub egui_renderer: EguiRenderer,
     pub make_screenshot: bool,
 }
 
@@ -208,16 +208,18 @@ impl Renderer {
         let texture_renderer =
             TextureRenderer::init(device, surface_config, app.color_state_descriptor.clone());
 
+        let egui_rpass = egui_wgpu::renderer::RenderPass::new(&device, surface_config.format, 1);
+
         Renderer {
             shader,
             pipeline,
             vertex_buffer,
             vertex_count: 0,
             matrix_bind_group: bind_group,
+            egui_rpass,
             rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
             texture_renderer,
             surface_config: surface_config.clone(),
-            egui_renderer: EguiRenderer::init(device, surface_config.format),
             make_screenshot: false,
         }
     }
@@ -438,7 +440,9 @@ impl Renderer {
         encoder: &mut CommandEncoder,
         frame: &SurfaceTexture,
         gui: &mut Gui,
-        clipped_meshes: &[ClippedMesh],
+        output: FullOutput,
+        context: &egui::Context,
+        scale_factor: f32,
     ) {
         self.clear_render_texture(queue);
         self.render_to_texture(encoder);
@@ -460,16 +464,6 @@ impl Renderer {
             &self.texture_renderer.bind_group_layout,
             &self.texture_renderer.render_texture,
             &self.texture_renderer.sampler,
-        );
-
-        self.egui_renderer.render(
-            device,
-            queue,
-            encoder,
-            &self.surface_config,
-            &frame.texture.create_view(&TextureViewDescriptor::default()),
-            gui,
-            clipped_meshes,
         );
 
         {
@@ -496,6 +490,32 @@ impl Renderer {
             );
             // vertex range, instance range
             rpass.draw_indexed(0..self.texture_renderer.index_buffer_size, 0, 0..1);
+            let clipped_primitives = context.tessellate(output.shapes);
+
+            // Upload all resources for the GPU.
+            let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
+                size_in_pixels: [self.surface_config.width, self.surface_config.height],
+                pixels_per_point: scale_factor,
+            };
+
+            for (id, image_delta) in &output.textures_delta.set {
+                self.egui_rpass
+                    .update_texture(&device, &queue, *id, image_delta);
+            }
+            for id in &output.textures_delta.free {
+                self.egui_rpass.free_texture(id);
+            }
+            self.egui_rpass.update_buffers(
+                &device,
+                &queue,
+                &clipped_primitives,
+                &screen_descriptor,
+            );
+            self.egui_rpass.execute_with_renderpass(
+                &mut rpass,
+                &clipped_primitives,
+                &screen_descriptor,
+            );
         }
     }
 
@@ -505,7 +525,9 @@ impl Renderer {
         device: &Device,
         queue: &Queue,
         gui: &mut Gui,
-        clipped_meshes: &[ClippedMesh],
+        output: FullOutput,
+        context: &egui::Context,
+        scale_factor: f32,
     ) {
         let vb = gui.app.draw();
         // self.update_vertex_buffer_with_line_strips(device, &vb);
@@ -527,7 +549,16 @@ impl Renderer {
         }
 
         if gui.app.get_render_to_texture() {
-            self.render_texture(device, queue, &mut encoder, frame, gui, clipped_meshes);
+            self.render_texture(
+                device,
+                queue,
+                &mut encoder,
+                frame,
+                gui,
+                output,
+                context,
+                scale_factor,
+            );
         } else {
             {
                 let view = frame.texture.create_view(&TextureViewDescriptor::default());
@@ -547,18 +578,34 @@ impl Renderer {
                 rpass.set_pipeline(&self.pipeline);
                 rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
                 rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
+                                                        //
+                let clipped_primitives = context.tessellate(output.shapes);
+                // Upload all resources for the GPU.
+                let screen_descriptor = ScreenDescriptor {
+                    size_in_pixels: [self.surface_config.width, self.surface_config.height],
+                    pixels_per_point: scale_factor,
+                };
+                for (id, image_delta) in &output.textures_delta.set {
+                    self.egui_rpass
+                        .update_texture(&device, &queue, *id, image_delta);
+                }
+                for id in &output.textures_delta.free {
+                    self.egui_rpass.free_texture(id);
+                }
+                self.egui_rpass.update_buffers(
+                    &device,
+                    &queue,
+                    &clipped_primitives,
+                    &screen_descriptor,
+                );
+                self.egui_rpass.execute_with_renderpass(
+                    &mut rpass,
+                    &clipped_primitives,
+                    &screen_descriptor,
+                );
             }
         }
 
-        self.egui_renderer.render(
-            device,
-            queue,
-            &mut encoder,
-            &self.surface_config,
-            &frame.texture.create_view(&TextureViewDescriptor::default()),
-            gui,
-            clipped_meshes,
-        );
         queue.submit(iter::once(encoder.finish()));
     }
 }

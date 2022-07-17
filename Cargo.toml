@@ -13,9 +13,10 @@ wgpu = { version = "0.13", features = ["webgl"]}
 bytemuck = { version = "1.4", features = ["derive"] }
 log = "0.4"
 chrono = "0.4"
-egui = "0.15"
-epi = "0.15"
-egui_winit_platform = "0.12"
+egui = { git = "https://github.com/emilk/egui" }
+eframe = { git = "https://github.com/emilk/egui" }
+egui-wgpu = { git = "https://github.com/emilk/egui", features = ["winit"] }
+egui-winit = { git = "https://github.com/emilk/egui", default-features = false}
 winit = "0.26"
 cgmath = "0.17"
 instant = "0.1"
@@ -31,13 +32,13 @@ env_logger = "0.8"
 rfd = "0.6"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.78"
-wasm-bindgen-futures = "0.4.24"
+wasm-bindgen = "0.2.81"
+wasm-bindgen-futures = "0.4.31"
 getrandom = { version = "0.2", features = ["js"] }
 console_error_panic_hook = "0.1.6"
 console_log = "0.1.2"
-web-sys = "0.3.51"
-js-sys = "0.3.53"
+web-sys = "0.3.58"
+js-sys = "0.3.58"
 
 [dependencies.collision2d]
 git = "https://github.com/sphereflow/collision2d"
