@@ -1,5 +1,10 @@
 # Light Garden
 
+## Try it out
+
+You can try it out [here](https://sphereflow.github.io/light_garden.html).  
+It can be performance hungry in more complex scenes.  
+
 ## Screenshots
 
 ![](https://github.com/sphereflow/light_garden/blob/master/images/screenshot1.jpg)
