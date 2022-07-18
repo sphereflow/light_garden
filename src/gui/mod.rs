@@ -261,6 +261,9 @@ impl Gui {
             if ui.button("Add Con(v)ex Polygon").clicked() {
                 self.app.mode = Mode::DrawConvexPolygon { points: Vec::new() };
             }
+            if ui.button("Add C(u)rved Mirror").clicked() {
+                self.app.mode = Mode::DrawCurvedMirror { points: Vec::new() };
+            }
         }
     }
 

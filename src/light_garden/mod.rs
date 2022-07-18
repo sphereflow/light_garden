@@ -436,6 +436,17 @@ impl LightGarden {
                 }
             }
 
+            Mode::DrawCurvedMirror { ref mut points } => {
+                points.push(self.mouse_pos);
+                if points.len() == 4 {
+                    self.tracer
+                        .push_object(Object::new_curved_mirror(&CubicBezier {
+                            points: [points[0], points[1], points[2], points[3]],
+                        }));
+                    self.mode = Mode::Selecting(None);
+                }
+            }
+
             Mode::SelectTile => {
                 if let Some(tile) = self.tracer.get_tile(&self.mouse_pos) {
                     self.mode = Mode::TileSelected { tile: tile.clone() };
@@ -475,7 +486,6 @@ impl LightGarden {
                     if let Some(obj) = self.get_selected_object() {
                         match obj.object_enum {
                             ObjectE::CurvedMirror(ref mut cm) => {
-                                println!("dragged on edit curved mirror");
                                 let mut min_distance = Float::MAX;
                                 let mut min_ix = 0;
                                 for (ix, point) in cm.cubic.points.iter().enumerate() {
@@ -632,6 +642,7 @@ pub enum Mode {
     DrawRectStart,
     DrawRectEnd { start: P2 },
     DrawConvexPolygon { points: Vec<P2> },
+    DrawCurvedMirror { points: Vec<P2> },
     DrawPointLight,
     DrawSpotLightStart,
     DrawSpotLightEnd { origin: P2 },
@@ -661,6 +672,7 @@ impl Display for Mode {
             Self::DrawRectStart => write!(f, "DrawRectStart"),
             Self::DrawRectEnd { .. } => write!(f, "DrawRectEnd"),
             Self::DrawConvexPolygon { .. } => write!(f, "DrawConvexPolygon"),
+            Self::DrawCurvedMirror { .. } => write!(f, "DrawBezier"),
             Self::DrawPointLight => write!(f, "DrawPointLight"),
             Self::DrawSpotLightStart => write!(f, "DrawSpotLightStart"),
             Self::DrawSpotLightEnd { .. } => write!(f, "DrawSpotLightEnd"),

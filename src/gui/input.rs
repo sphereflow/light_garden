@@ -59,7 +59,11 @@ impl Gui {
                         (Some(Key::V), UiMode::Add) => {
                             self.app.mode = Mode::DrawConvexPolygon { points: Vec::new() }
                         }
+                        (Some(Key::U), UiMode::Add) => {
+                            self.app.mode = Mode::DrawCurvedMirror { points: Vec::new() }
+                        }
 
+                        (Some(Key::E), UiMode::Selected) => self.app.mode = Mode::EditObject,
                         (Some(Key::R), UiMode::Selected) => self.app.mode = Mode::Rotate,
                         (Some(Key::A), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::And))
