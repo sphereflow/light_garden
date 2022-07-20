@@ -143,8 +143,11 @@ impl Gui {
     }
 
     pub fn string_mod_selector(&mut self, ui: &mut Ui) {
-        if ui.button("Screenshot").clicked() {
-            self.app.screenshot_path = Some("screenshot.jpg".to_owned());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if ui.button("Screenshot").clicked() {
+                self.app.screenshot_path = Some("screenshot.jpg".to_owned());
+            }
         }
         ui.add(
             DragValue::new::<usize>(&mut self.app.string_mod_ix)

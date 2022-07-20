@@ -223,11 +223,15 @@ impl Tracer {
     }
 
     pub fn serialize(&self) -> ron::Result<String> {
-        ron::to_string(&(self.objects.clone(), self.lights.clone()))
+        ron::ser::to_string_pretty(
+            &(self.objects.clone(), self.lights.clone()),
+            ron::ser::PrettyConfig::default(),
+        )
     }
 
     pub fn load(&mut self, data: &str) {
-        let (objects, lights) = ron::from_str::<(Vec<Object>, Vec<Light>)>(data).expect("Could not load RON file!");
+        let (objects, lights) =
+            ron::from_str::<(Vec<Object>, Vec<Light>)>(data).expect("Could not load RON file!");
         self.clear();
         self.objects = objects;
         self.lights = lights;

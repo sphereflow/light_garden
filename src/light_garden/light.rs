@@ -78,7 +78,7 @@ impl HasOrigin for Light {
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize)]
 pub struct DirectionalLight {
     color: Color,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     rays: Vec<Ray>,
     num_rays: usize,
     start: LineSegment,
@@ -139,7 +139,7 @@ impl Rotate for DirectionalLight {
 pub struct PointLight {
     position: P2,
     pub color: Color,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     rays: Vec<Ray>,
     num_rays: usize,
 }
@@ -190,7 +190,7 @@ impl HasOrigin for PointLight {
 pub struct SpotLight {
     position: P2,
     color: Color,
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     rays: Vec<Ray>,
     num_rays: usize,
     pub spot_angle: Float,

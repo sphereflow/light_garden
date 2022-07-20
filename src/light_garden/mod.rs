@@ -622,8 +622,21 @@ impl LightGarden {
         .expect(&format!("Could not load RON file: {}", path));
     }
 
-    pub fn load_from_file(&self, path: &str) {
-        std::fs::read(path).expect(&format!("Could not read file: {}", path));
+    pub fn load_from_file(&mut self, path: &str) {
+        let serialized_bytes =
+            std::fs::read(path).expect(&format!("Could not read file: {}", path));
+        let (mut objects, mut lights): (Vec<Object>, Vec<Light>) =
+            ron::de::from_bytes(&serialized_bytes).expect("Failed to deserialize");
+        self.tracer.clear();
+        for obj in objects.drain(..) {
+            self.tracer.push_object(obj);
+        }
+        for light in lights.iter_mut() {
+            light.set_num_rays(None);
+        }
+        for light in lights.drain(..) {
+            self.tracer.push_light(light);
+        }
     }
 }
 

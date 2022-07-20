@@ -153,8 +153,18 @@ impl Gui {
         if ui.button("S(e)ttings").clicked() {
             self.ui_mode = UiMode::Settings;
         }
-        if ui.button("Screenshot").clicked() {
-            self.app.screenshot_path = Some("screenshot.jpg".to_owned());
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            if ui.button("Screenshot").clicked() {
+                if let Some(path_buf) = FileDialog::new()
+                    .set_file_name("Screenshot.jpg")
+                    .save_file()
+                {
+                    if let Some(path) = path_buf.to_str() {
+                        self.app.screenshot_path = Some(path.to_string());
+                    }
+                }
+            }
         }
         if ui.button("(G)rid").clicked() {
             self.ui_mode = UiMode::Grid;
@@ -308,7 +318,7 @@ impl Gui {
     #[cfg(not(target_arch = "wasm32"))]
     fn save_file(&mut self, ui: &mut Ui) {
         if ui.button("Save ...").clicked() {
-            if let Some(path_buf) = FileDialog::new().pick_file() {
+            if let Some(path_buf) = FileDialog::new().set_file_name("save.ron").save_file() {
                 if let Some(path) = path_buf.to_str() {
                     self.app.save_to_file(path);
                 }
