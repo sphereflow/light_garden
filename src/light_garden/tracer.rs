@@ -20,13 +20,10 @@ impl Tracer {
     pub fn new(canvas_bounds: &Rect) -> Self {
         let light = Light::PointLight(PointLight::new(Point2::new(-0.1, 0.1), 10000, [0.01; 4]));
         let lens = Object::new_lens(P2::new(0.7, 0.), 2., 3.8);
-        let mut cubic1 = CubicBezier::new_sample();
-        let mut cubic2 = CubicBezier::new_sample2();
-        cubic1.scale(0.5, 0.5);
-        cubic2.scale(0.5, 0.5);
-        let curved_mirror1 = Object::new_curved_mirror(&cubic1);
-        let curved_mirror2 = Object::new_curved_mirror(&cubic2);
-        let objects = vec![lens, curved_mirror1, curved_mirror2];
+        let mut cubic = CubicBezier::new_sample2();
+        cubic.scale(0.5, 0.5);
+        let curved_mirror = Object::new_curved_mirror(&cubic);
+        let objects = vec![lens, curved_mirror];
         let mut tile_map = TileMap::new(canvas_bounds.width, canvas_bounds.height, 100, 100, 8);
         for obj in objects.iter() {
             tile_map.push_obj(obj);
