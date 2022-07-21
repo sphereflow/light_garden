@@ -26,7 +26,7 @@ impl Gui {
                             UiMode::Settings => self.ui_mode = UiMode::Main,
                             UiMode::Grid => self.ui_mode = UiMode::Main,
                             UiMode::StringMod => {
-                                self.app.mode = Mode::NoMode;
+                                self.app.mode = Mode::StringMod;
                                 self.ui_mode = UiMode::Main;
                             }
                             UiMode::TileMap => {

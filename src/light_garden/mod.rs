@@ -261,11 +261,6 @@ impl LightGarden {
             return;
         }
         match &mut self.mode {
-            Mode::NoMode => {
-                self.selected_object = None;
-                self.selected_light = None;
-            }
-
             Mode::Selecting(None) => {
                 self.selected_object = None;
                 self.selected_light = None;
@@ -647,7 +642,6 @@ impl LightGarden {
 
 #[derive(PartialEq, Debug, Clone)]
 pub enum Mode {
-    NoMode,
     Selecting(Option<LogicOp>),
     Selected,
     Moving,
@@ -676,7 +670,6 @@ use std::fmt::{Display, Formatter, Result};
 impl Display for Mode {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
-            Self::NoMode => write!(f, "NoMode"),
             Self::Selecting(None) => write!(f, "Selecting(None)"),
             Self::Selecting(Some(op)) => write!(f, "Selecting({:?})", op),
             Self::Selected => write!(f, "Selected"),

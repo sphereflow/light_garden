@@ -35,8 +35,7 @@ impl Gui {
         ctx.begin_frame(input);
         let bdisplay_ui = matches!(
             self.app.mode,
-            Mode::NoMode
-                | Mode::Selected
+            Mode::Selected
                 | Mode::Selecting(None)
                 | Mode::DrawConvexPolygon { .. }
                 | Mode::StringMod
@@ -296,7 +295,7 @@ impl Gui {
 
     fn draw_convex_polygon(&mut self, ui: &mut Ui) {
         if ui.button("Finish").clicked() {
-            self.app.mode = Mode::NoMode;
+            self.app.mode = Mode::Selecting(None);
             self.ui_mode = UiMode::Add;
             self.app.tracer.finish_drawing_object(false);
         }

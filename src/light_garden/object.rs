@@ -1,6 +1,8 @@
 use collision2d::geo::*;
 use serde::{Deserialize, Serialize};
 
+use super::Color;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ObjectE {
     StraightMirror(StraightMirror),
@@ -323,6 +325,18 @@ pub struct CurvedMirror {
 impl CurvedMirror {
     pub fn new(cubic: CubicBezier) -> Self {
         CurvedMirror { cubic }
+    }
+
+    pub fn get_control_lines(&self) -> Vec<(P2, Color)> {
+        let mut lines = Vec::new();
+        let red = [1., 0., 0., 1.];
+        lines.push((self.cubic.points[0], red));
+        lines.push((self.cubic.points[1], red));
+        lines.push((self.cubic.points[1], red));
+        lines.push((self.cubic.points[2], red));
+        lines.push((self.cubic.points[2], red));
+        lines.push((self.cubic.points[3], red));
+        lines
     }
 }
 

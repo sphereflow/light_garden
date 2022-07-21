@@ -390,13 +390,7 @@ impl Tracer {
         // draw control lines for cubic bezier curves
         for obj in self.objects.iter() {
             if let ObjectE::CurvedMirror(cm) = obj.object_enum {
-                let red = [1., 0., 0., 1.];
-                all_lines.push((cm.cubic.points[0], red));
-                all_lines.push((cm.cubic.points[1], red));
-                all_lines.push((cm.cubic.points[1], red));
-                all_lines.push((cm.cubic.points[2], red));
-                all_lines.push((cm.cubic.points[2], red));
-                all_lines.push((cm.cubic.points[3], red));
+                all_lines.append(&mut cm.get_control_lines());
             }
         }
 
