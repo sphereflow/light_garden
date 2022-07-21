@@ -1,75 +1,100 @@
-(
-    [
-        (
-            object_enum: Lens(
-                (
-                    l: (
-                        op: And,
-                        a: GeoCircle(
-                            (
-                                origin: [1.9, 0],
-                                radius: 2,
-                            ),
-                        ),
-                        b: GeoCircle(
-                            (
-                                origin: [
-                                    -1.9,
-                                    0,
-                                ],
-                                radius: 2,
-                            ),
-                        ),
-                        origin: [0.7, 0],
-                        rotation: [1, 0, 0, 1],
-                    ),
-                ),
+([
+    (
+        object_enum: Lens((
+            l: (
+                op: And,
+                a: GeoCircle((
+                    origin: [
+                        1.9,
+                        0,
+                    ],
+                    radius: 2,
+                )),
+                b: GeoCircle((
+                    origin: [
+                        -1.9,
+                        0,
+                    ],
+                    radius: 2,
+                )),
+                origin: [
+                    -0.022772240638732733,
+                    -0.09999999999999998,
+                ],
+                rotation: [
+                    0.00000000000000006123233995736766,
+                    -1,
+                    1,
+                    0.00000000000000006123233995736766,
+                ],
             ),
-            material_opt: Some(
-                (refractive_index: 1.2),
+        )),
+        material_opt: Some((
+            refractive_index: 1.05,
+        )),
+        moved: false,
+    ),
+    (
+        object_enum: CurvedMirror((
+            cubic: (
+                points: ([
+                    -0.622772240638733,
+                    0.40000000000000013,
+                ], [
+                    -0.3227722406387328,
+                    0.8,
+                ], [
+                    0.2772277593612673,
+                    0.8,
+                ], [
+                    0.5772277593612682,
+                    0.40000000000000013,
+                ]),
             ),
-            moved: true,
-        ),
-        (
-            object_enum: CurvedMirror(
-                (
-                    cubic: (
-                        points: (
-                            [0, -1],
-                            [0, 0],
-                            [1, 0],
-                            [1, 1],
-                        ),
-                    ),
-                ),
-            ),
-            material_opt: None,
-            moved: true,
-        ),
-        (
-            object_enum: CurvedMirror(
-                (
-                    cubic: (
-                        points: (
-                            [0, 0.5],
-                            [0.7, 0],
-                            [0.3, 1],
-                            [1, 0.3],
-                        ),
-                    ),
-                ),
-            ),
-            material_opt: None,
-            moved: true,
-        ),
-    ],
-    [
-        PointLight(
-            (
-                position: [-0.1, 0.1],
-                color: (0.01, 0.01, 0.01, 0.01),
-                num_rays: 10000,
-            ),
-        ),
-    ],
-)
+        )),
+        material_opt: None,
+        moved: false,
+    ),
+    (
+        object_enum: Rect((
+            origin: [
+                -0.022772240638732733,
+                -0.5,
+            ],
+            rotation: [
+                1,
+                0,
+                0,
+                1,
+            ],
+            width: 0.40000000000000036,
+            height: 0.3999999999999999,
+        )),
+        material_opt: Some((
+            refractive_index: 1.73,
+        )),
+        moved: false,
+    ),
+], [
+    PointLight((
+        position: [
+            -0.022772240638732733,
+            -0.5,
+        ],
+        color: (0.009721218, 0.009721218, 0.009721218, 0.011764706),
+        num_rays: 10000,
+    )),
+    SpotLight((
+        position: [
+            1.0772277593612674,
+            -0.09999999999999998,
+        ],
+        color: (0.0036765062, 0.020288562, 0.016807375, 0.03529412),
+        num_rays: 2000,
+        spot_angle: 0.17453292519943295,
+        spot_direction: [
+            -0.9999922358557027,
+            0.003940587305547067,
+        ],
+    )),
+])

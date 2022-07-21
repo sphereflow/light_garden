@@ -66,7 +66,7 @@ impl LightGarden {
             write_mask: wgpu::ColorWrites::ALL,
         };
         let tracer = Tracer::new(&canvas_bounds);
-        LightGarden {
+        let mut app = LightGarden {
             tracer,
             drawer: Drawer::new(&canvas_bounds),
             mouse_pos: P2::new(0., 0.),
@@ -86,7 +86,10 @@ impl LightGarden {
             mouse_is_down: false,
             initial_mouse_down: P2::new(0., 0.),
             drag_event: None,
-        }
+        };
+        #[cfg(not(target_arch = "wasm32"))]
+        app.load_from_file("default.ron");
+        app
     }
 
     pub fn update_mouse_position(&mut self, position: P2) {
@@ -625,17 +628,19 @@ impl LightGarden {
     pub fn load_from_file(&mut self, path: &str) {
         let serialized_bytes =
             std::fs::read(path).expect(&format!("Could not read file: {}", path));
-        let (mut objects, mut lights): (Vec<Object>, Vec<Light>) =
-            ron::de::from_bytes(&serialized_bytes).expect("Failed to deserialize");
-        self.tracer.clear();
-        for obj in objects.drain(..) {
-            self.tracer.push_object(obj);
-        }
-        for light in lights.iter_mut() {
-            light.set_num_rays(None);
-        }
-        for light in lights.drain(..) {
-            self.tracer.push_light(light);
+        if let Ok((mut objects, mut lights)) =
+            ron::de::from_bytes::<(Vec<Object>, Vec<Light>)>(&serialized_bytes)
+        {
+            self.tracer.clear();
+            for obj in objects.drain(..) {
+                self.tracer.push_object(obj);
+            }
+            for light in lights.iter_mut() {
+                light.set_num_rays(None);
+            }
+            for light in lights.drain(..) {
+                self.tracer.push_light(light);
+            }
         }
     }
 }
