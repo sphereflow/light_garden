@@ -1,8 +1,6 @@
 use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
-use egui_wgpu::renderer::{RenderPass, ScreenDescriptor};
 use winit::{
-    dpi::LogicalSize,
     event::{self, WindowEvent},
     event_loop::{ControlFlow, EventLoop},
 };

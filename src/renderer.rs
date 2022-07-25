@@ -1,15 +1,13 @@
 use crate::gui::Gui;
-use crate::light_garden::light::Color;
 use crate::light_garden::LightGarden;
+use crate::sub_render_pass::SubRenderPass;
 use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};
 use bytemuck::{Pod, Zeroable};
-use collision2d::geo::*;
 use egui::FullOutput;
 use egui_wgpu::renderer::ScreenDescriptor;
 use half::f16;
 use image::save_buffer_with_format;
 use std::{iter, num::NonZeroU32};
-use wgpu::util::DeviceExt;
 use wgpu::*;
 
 #[repr(C)]
@@ -24,165 +22,15 @@ unsafe impl Zeroable for Vertex {}
 
 pub struct Renderer {
     shader: ShaderModule,
-    pipeline: RenderPipeline,
-    vertex_buffer: Buffer,
-    vertex_count: u32,
-    matrix_bind_group: BindGroup,
+    sub_rpass_lines: SubRenderPass,
+    sub_rpass_triangles: SubRenderPass,
     egui_rpass: egui_wgpu::renderer::RenderPass,
-    rebuild_bundle: bool,
     texture_renderer: TextureRenderer,
     surface_config: SurfaceConfiguration,
     pub make_screenshot: bool,
 }
 
 impl Renderer {
-    fn create_pipeline(
-        surface_config: &SurfaceConfiguration,
-        device: &Device,
-        queue: &Queue,
-        shader: &ShaderModule,
-        app: &mut LightGarden,
-    ) -> (RenderPipeline, BindGroup) {
-        app.recreate_pipeline = false;
-        // layout for the projection matrix
-        let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("Renderer: bind group layout"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX,
-                ty: wgpu::BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(64),
-                },
-                count: None,
-            }],
-        });
-
-        // create the projection matrix
-        let aspect = surface_config.width as f32 / surface_config.height as f32;
-        let mx = Self::generate_matrix(aspect);
-        let mx_ref: &[f32; 16] = mx.as_ref();
-        let mx_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("u_Transform"),
-            contents: bytemuck::cast_slice(mx_ref),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        // set new canvas bounds
-        let new_canvas_bounds = Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64);
-        app.tracer.resize(&new_canvas_bounds);
-        app.drawer.resize(&new_canvas_bounds);
-
-        // write to the projection matix buffer
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("u_Transform"),
-            layout: &bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &mx_buf,
-                    offset: 0,
-                    size: None,
-                }),
-            }],
-        });
-        queue.write_buffer(&mx_buf, 0, bytemuck::cast_slice(mx_ref));
-
-        let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
-            label: Some("pipeline layout"),
-            bind_group_layouts: &[&bind_group_layout],
-            push_constant_ranges: &[],
-        });
-
-        if app.get_render_to_texture() {
-            app.color_state_descriptor.format = RENDER_TEXTURE_FORMAT;
-        } else {
-            app.color_state_descriptor.format = surface_config.format;
-        }
-
-        (
-            device.create_render_pipeline(&RenderPipelineDescriptor {
-                label: Some("render pipeline"),
-                layout: Some(&pipeline_layout),
-                vertex: VertexState {
-                    module: shader,
-                    entry_point: "vs_main",
-                    buffers: &[wgpu::VertexBufferLayout {
-                        array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
-                        step_mode: VertexStepMode::Vertex,
-                        attributes: &vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
-                    }],
-                },
-                fragment: Some(FragmentState {
-                    module: shader,
-                    entry_point: "fs_main",
-                    targets: &[Some(app.color_state_descriptor.clone())],
-                }),
-                // render lines
-                primitive: PrimitiveState {
-                    topology: PrimitiveTopology::LineList,
-                    front_face: FrontFace::Cw,
-                    ..Default::default()
-                },
-                depth_stencil: None,
-                // no multisample
-                multisample: MultisampleState {
-                    ..Default::default()
-                },
-                multiview: None,
-            }),
-            bind_group,
-        )
-    }
-
-    pub fn update_vertex_buffer(&mut self, device: &Device, vertices: &[(P2, Color)]) {
-        let vertex_data: Vec<Vertex> = vertices
-            .iter()
-            .map(|(p, color)| Vertex {
-                _pos: [p.x as f32, p.y as f32],
-                _color: *color,
-                _tex_coord: [0., 0.],
-            })
-            .collect();
-        self.vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertex_data),
-            usage: BufferUsages::VERTEX,
-        });
-        self.vertex_count = vertex_data.len() as u32;
-        self.rebuild_bundle = true;
-    }
-
-    pub fn update_vertex_buffer_with_line_strips(
-        &mut self,
-        device: &Device,
-        vertices: &[(Vec<P2>, Color)],
-    ) {
-        let mut vertex_data: Vec<Vertex> = Vec::with_capacity(vertices.len() * 2);
-        for (line_strip, color) in vertices {
-            for w in line_strip.windows(2) {
-                vertex_data.push(Vertex {
-                    _pos: [w[0].x as f32, w[0].y as f32],
-                    _color: *color,
-                    _tex_coord: [0., 0.],
-                });
-                vertex_data.push(Vertex {
-                    _pos: [w[1].x as f32, w[1].y as f32],
-                    _color: *color,
-                    _tex_coord: [0., 0.],
-                });
-            }
-        }
-        self.vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertex_data),
-            usage: BufferUsages::VERTEX,
-        });
-        self.vertex_count = vertex_data.len() as u32;
-        self.rebuild_bundle = true;
-    }
-
     pub fn init(
         surface_config: &SurfaceConfiguration,
         device: &Device,
@@ -195,15 +43,22 @@ impl Renderer {
             source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(include_str!("shader.wgsl"))),
         });
 
-        // create the vertex buffer
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Vertex Buffer"),
-            size: 0,
-            mapped_at_creation: true,
-            usage: BufferUsages::VERTEX,
-        });
-        let (pipeline, bind_group) =
-            Renderer::create_pipeline(surface_config, device, queue, &shader, app);
+        let sub_rpass_lines = SubRenderPass::new(
+            surface_config,
+            device,
+            queue,
+            &shader,
+            app,
+            PrimitiveTopology::LineList,
+        );
+        let sub_rpass_triangles = SubRenderPass::new(
+            surface_config,
+            device,
+            queue,
+            &shader,
+            app,
+            PrimitiveTopology::TriangleList,
+        );
 
         let texture_renderer =
             TextureRenderer::init(device, surface_config, app.color_state_descriptor.clone());
@@ -212,19 +67,34 @@ impl Renderer {
 
         Renderer {
             shader,
-            pipeline,
-            vertex_buffer,
-            vertex_count: 0,
-            matrix_bind_group: bind_group,
+            sub_rpass_lines,
+            sub_rpass_triangles,
             egui_rpass,
-            rebuild_bundle: false, // wether the bundle and with it the vertex buffer is rebuilt every frame
             texture_renderer,
             surface_config: surface_config.clone(),
             make_screenshot: false,
         }
     }
 
-    fn generate_matrix(aspect_ratio: f32) -> cgmath::Matrix4<f32> {
+    fn recreate_pipelines(&mut self, device: &Device, queue: &Queue, app: &mut LightGarden) {
+        app.recreate_pipelines = false;
+        self.sub_rpass_lines.recreate_pipeline(
+            &self.surface_config,
+            device,
+            queue,
+            &self.shader,
+            app,
+        );
+        self.sub_rpass_triangles.recreate_pipeline(
+            &self.surface_config,
+            device,
+            queue,
+            &self.shader,
+            app,
+        );
+    }
+
+    pub fn generate_matrix(aspect_ratio: f32) -> cgmath::Matrix4<f32> {
         let mx_projection = cgmath::ortho(-aspect_ratio, aspect_ratio, -1.0, 1.0, 0., 1.);
         let mx_correction = crate::framework::OPENGL_TO_WGPU_MATRIX;
         mx_correction * mx_projection //* mx_view
@@ -240,13 +110,7 @@ impl Renderer {
         self.surface_config = surface_config.clone();
         self.texture_renderer
             .generate_render_texture(device, &self.surface_config);
-
-        let (pipeline, bind_group) =
-            Renderer::create_pipeline(&self.surface_config, device, queue, &self.shader, app);
-        self.pipeline = pipeline;
-        self.matrix_bind_group = bind_group;
-        self.texture_renderer
-            .generate_render_texture(device, &self.surface_config);
+        self.recreate_pipelines(device, queue, app);
     }
 
     fn clear_render_texture(&mut self, queue: &Queue) {
@@ -292,10 +156,8 @@ impl Renderer {
                 })],
                 depth_stencil_attachment: None,
             });
-            rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
-            rpass.set_pipeline(&self.pipeline);
-            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
-            rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
+            self.sub_rpass_lines.render(&mut rpass);
+            self.sub_rpass_triangles.render(&mut rpass);
         }
     }
 
@@ -346,10 +208,8 @@ impl Renderer {
                 })],
                 depth_stencil_attachment: None,
             });
-            rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
-            rpass.set_pipeline(&self.pipeline);
-            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
-            rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
+            self.sub_rpass_lines.render(&mut rpass);
+            self.sub_rpass_triangles.render(&mut rpass);
         }
         let copy_wrapper = ImageCopyTexture {
             texture: &texture,
@@ -446,7 +306,7 @@ impl Renderer {
     ) {
         self.clear_render_texture(queue);
         self.render_to_texture(encoder);
-        if gui.app.recreate_pipeline {
+        if gui.app.recreate_pipelines {
             let (pipeline, _bind_group_layout, bind_group, _sampler) =
                 TextureRenderer::create_pipeline(
                     device,
@@ -529,23 +389,17 @@ impl Renderer {
         context: &egui::Context,
         scale_factor: f32,
     ) {
-        let vb = gui.app.draw();
-        // self.update_vertex_buffer_with_line_strips(device, &vb);
-        self.update_vertex_buffer(device, &vb);
+        let render_result = gui.app.draw();
+        self.sub_rpass_lines
+            .update_vertex_buffer(device, &render_result.lines);
+        self.sub_rpass_triangles
+            .update_vertex_buffer(device, &render_result.triangles);
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("Command Encoder"),
         });
 
-        if gui.app.recreate_pipeline {
-            let (pipeline, bind_group) = Renderer::create_pipeline(
-                &self.surface_config,
-                device,
-                queue,
-                &self.shader,
-                &mut gui.app,
-            );
-            self.pipeline = pipeline;
-            self.matrix_bind_group = bind_group;
+        if gui.app.recreate_pipelines {
+            self.recreate_pipelines(device, queue, &mut gui.app);
         }
 
         if gui.app.get_render_to_texture() {
@@ -574,11 +428,9 @@ impl Renderer {
                     })],
                     depth_stencil_attachment: None,
                 });
-                rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
-                rpass.set_pipeline(&self.pipeline);
-                rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
-                rpass.draw(0..self.vertex_count, 0..1); // vertex range, instance range
-                                                        //
+                self.sub_rpass_lines.render(&mut rpass);
+                self.sub_rpass_triangles.render(&mut rpass);
+
                 let clipped_primitives = context.tessellate(output.shapes);
                 // Upload all resources for the GPU.
                 let screen_descriptor = ScreenDescriptor {
