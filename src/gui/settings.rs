@@ -159,7 +159,7 @@ impl Gui {
                 .changed();
         }
 
-        self.app.recreate_pipeline |= selected_changed;
+        self.app.recreate_pipelines |= selected_changed;
     }
 
     pub fn edit_cutoff_color(&mut self, ui: &mut Ui) {
