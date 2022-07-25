@@ -9,7 +9,11 @@ use na::{distance, Point2};
 pub use object::*;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
-use std::{collections::VecDeque, f64::consts::*};
+use std::{
+    collections::VecDeque,
+    f64::consts::*,
+    sync::{Arc, Mutex},
+};
 pub use string_mod::*;
 pub use tile_map::*;
 pub use tracer::*;
@@ -34,13 +38,15 @@ pub struct LightGarden {
     pub selected_light: Option<usize>,
     pub selected_color: Color,
     pub color_state_descriptor: wgpu::ColorTargetState,
-    pub recreate_pipeline: bool,
+    pub recreate_pipelines: bool,
     pub ray_width: f64,
     pub mode: Mode,
     render_to_texture: bool,
     pub string_mods: Vec<StringMod>,
     pub string_mod_ix: usize,
     pub screenshot_path: Option<String>,
+    pub save_file_path: Arc<Mutex<Option<String>>>,
+    pub load_file_path: Arc<Mutex<Option<String>>>,
     drag_radius: f64,
     mouse_is_down: bool,
     initial_mouse_down: P2,
@@ -73,7 +79,7 @@ impl LightGarden {
             selected_object: None,
             selected_light: None,
             color_state_descriptor,
-            recreate_pipeline: true,
+            recreate_pipelines: true,
             num_rays: 2000,
             selected_color: [0.02, 0.03, 0.05, 0.01],
             render_to_texture: false,
@@ -82,6 +88,8 @@ impl LightGarden {
             string_mods: vec![StringMod::new()],
             string_mod_ix: 0,
             screenshot_path: None,
+            save_file_path: Arc::new(Mutex::new(None)),
+            load_file_path: Arc::new(Mutex::new(None)),
             drag_radius: 0.05,
             mouse_is_down: false,
             initial_mouse_down: P2::new(0., 0.),
@@ -115,6 +123,22 @@ impl LightGarden {
     }
 
     pub fn update(&mut self) {
+        match self.save_file_path.clone().try_lock() {
+            Ok(mut guard) => {
+                if let Some(path) = guard.take() {
+                    self.load_from_file(&path);
+                }
+            }
+            _ => {}
+        }
+        match self.load_file_path.clone().try_lock() {
+            Ok(mut guard) => {
+                if let Some(path) = guard.take() {
+                    self.load_from_file(&path);
+                }
+            }
+            _ => {}
+        }
         match &self.mode {
             Mode::DrawMirrorEnd { start } => {
                 self.tracer
@@ -227,6 +251,13 @@ impl LightGarden {
                 }
                 for point in collision_points {
                     self.drawer.draw_point(&point.0, [1.0, 0.0, 1.0, 1.0]);
+                }
+            }
+
+            Mode::Selected => {
+                if let Some(ix) = self.selected_object {
+                    self.drawer
+                        .draw_selector(&mut self.tracer.index_object(ix).get_aabb(), 0.03);
                 }
             }
 
@@ -592,21 +623,25 @@ impl LightGarden {
         if render_to_texture != self.render_to_texture {
             println!("render_to_texture toggled: {}", render_to_texture);
             self.render_to_texture = render_to_texture;
-            self.recreate_pipeline = true;
+            self.recreate_pipelines = true;
         }
     }
 
-    pub fn draw(&mut self) -> Vec<(P2, Color)> {
+    pub fn draw(&mut self) -> RenderResult {
         if self.mode == Mode::StringMod {
-            let mut res = Vec::new();
+            let mut lines = Vec::new();
             for s in &self.string_mods {
-                res.append(&mut s.draw());
+                lines.append(&mut s.draw());
             }
-            res
+            RenderResult {
+                lines,
+                triangles: Vec::new(),
+            }
         } else {
             let mut lines = self.tracer.trace_all();
-            lines.extend(self.drawer.get_lines());
-            lines
+            lines.append(&mut self.drawer.get_lines());
+            let triangles = self.drawer.get_triangles();
+            RenderResult { lines, triangles }
         }
     }
 
@@ -700,4 +735,9 @@ impl Display for Mode {
 pub struct DragEvent {
     start: P2,
     end: P2,
+}
+
+pub struct RenderResult {
+    pub lines: Vec<(P2, Color)>,
+    pub triangles: Vec<(P2, Color)>,
 }

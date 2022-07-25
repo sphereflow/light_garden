@@ -316,23 +316,29 @@ impl Gui {
 
     #[cfg(not(target_arch = "wasm32"))]
     fn save_file(&mut self, ui: &mut Ui) {
+        use std::thread::spawn;
+
         if ui.button("Save ...").clicked() {
-            if let Some(path_buf) = FileDialog::new().set_file_name("save.ron").save_file() {
-                if let Some(path) = path_buf.to_str() {
-                    self.app.save_to_file(path);
+            let arc = self.app.save_file_path.clone();
+            spawn(move || {
+                let mut app_path = arc.lock().expect("gui::load_file: failed to aquire mutex");
+                if let Some(path_buf) = FileDialog::new().set_file_name("save.ron").save_file() {
+                    *app_path = path_buf.to_str().map(|s| s.into());
                 }
-            }
+            });
         }
     }
 
     #[cfg(not(target_arch = "wasm32"))]
     fn load_file(&mut self, ui: &mut Ui) {
         if ui.button("Load ...").clicked() {
-            if let Some(path_buf) = FileDialog::new().pick_file() {
-                if let Some(path) = path_buf.to_str() {
-                    self.app.load_from_file(path);
+            let arc = self.app.load_file_path.clone();
+            std::thread::spawn(move || {
+                let mut app_path = arc.lock().expect("gui::load_file: failed to aquire mutex");
+                if let Some(path_buf) = FileDialog::new().pick_file() {
+                    *app_path = path_buf.to_str().map(|s| s.into());
                 }
-            }
+            });
         }
     }
 }
