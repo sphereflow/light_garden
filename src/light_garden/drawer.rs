@@ -107,7 +107,7 @@ impl Drawer {
     pub fn draw_origin(&mut self, p: &P2, color: Color) {}
 
     pub fn draw_selector(&mut self, aabb: &mut Aabb, corner_length: f64) {
-        self.draw_selector_part(&aabb.points(), [0., 0., 0., 1.], corner_length * 1.5);
+        self.draw_selector_part(&aabb.points(), [0., 0., 0., 1.], corner_length * 1.2);
         self.draw_selector_part(&aabb.points(), [0., 1., 0., 1.], corner_length);
     }
 

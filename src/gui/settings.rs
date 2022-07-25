@@ -74,89 +74,48 @@ impl Gui {
         let mut selected_changed = false;
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let selected = &mut blend_state.color.src_factor;
-            selected_changed |= ComboBox::from_label("ColorSrc")
-                .selected_text(format!("{:?}", selected))
-                .show_ui(ui, |ui| {
-                    blend_factors.iter().for_each(|bf| {
-                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
-                    });
-                })
-                .response
-                .changed();
-        }
 
-        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let selected = &mut blend_state.color.dst_factor;
-            selected_changed |= ComboBox::from_label("ColorDst")
-                .selected_text(format!("{:?}", selected))
-                .show_ui(ui, |ui| {
-                    blend_factors.iter().for_each(|bf| {
-                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
-                    });
-                })
-                .response
-                .changed();
-        }
+            let combo = |(text, var): (&str, &mut BlendFactor), ui: &mut Ui| {
+                ComboBox::from_label(text)
+                    .selected_text(format!("{:?}", var))
+                    .show_ui(ui, |ui| {
+                        blend_factors.iter().for_each(|bf| {
+                            ui.selectable_value(var, *bf, format!("{:?}", bf));
+                        });
+                    })
+                    .response
+                    .changed()
+            };
 
-        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let selected = &mut blend_state.alpha.src_factor;
-            selected_changed |= ComboBox::from_label("AlphaSrc")
-                .selected_text(format!("{:?}", selected))
-                .show_ui(ui, |ui| {
-                    blend_factors.iter().for_each(|bf| {
-                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
-                    });
-                })
-                .response
-                .changed();
-        }
+            selected_changed = [
+                combo(("ColorSrc", &mut blend_state.color.src_factor), ui),
+                combo(("ColorDst", &mut blend_state.color.dst_factor), ui),
+                combo(("AlphaSrc", &mut blend_state.alpha.src_factor), ui),
+                combo(("AlphaDst", &mut blend_state.alpha.dst_factor), ui),
+            ].iter().any(|b| *b);
 
-        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let selected = &mut blend_state.alpha.dst_factor;
-            selected_changed |= ComboBox::from_label("AlphaDst")
-                .selected_text(format!("{:?}", selected))
-                .show_ui(ui, |ui| {
-                    blend_factors.iter().for_each(|bf| {
-                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
-                    });
-                })
-                .response
-                .changed();
-        }
+            let blend_ops: &[BlendOperation] = &[
+                BlendOperation::Min,
+                BlendOperation::Max,
+                BlendOperation::Add,
+                BlendOperation::Subtract,
+                BlendOperation::ReverseSubtract,
+            ];
 
-        let blend_ops: &[BlendOperation] = &[
-            BlendOperation::Min,
-            BlendOperation::Max,
-            BlendOperation::Add,
-            BlendOperation::Subtract,
-            BlendOperation::ReverseSubtract,
-        ];
+            let combo = |(text, var): (&str, &mut BlendOperation), ui: &mut Ui| {
+                ComboBox::from_label(text)
+                    .selected_text(format!("{:?}", var))
+                    .show_ui(ui, |ui| {
+                        blend_ops.iter().for_each(|bo| {
+                            ui.selectable_value(var, *bo, format!("{:?}", bo));
+                        });
+                    })
+                    .response
+                    .changed()
+            };
 
-        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let selected = &mut blend_state.color.operation;
-            selected_changed |= ComboBox::from_label("BlendOpColor")
-                .selected_text(format!("{:?}", selected))
-                .show_ui(ui, |ui| {
-                    blend_ops.iter().for_each(|bf| {
-                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
-                    });
-                })
-                .response
-                .changed();
-        }
-
-        if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-            let selected = &mut blend_state.alpha.operation;
-            selected_changed |= ComboBox::from_label("BlendOpAlpha")
-                .selected_text(format!("{:?}", selected))
-                .show_ui(ui, |ui| {
-                    blend_ops.iter().for_each(|bf| {
-                        ui.selectable_value(selected, *bf, format!("{:?}", bf));
-                    });
-                })
-                .response
-                .changed();
+            selected_changed |= combo(("BlendOpColor", &mut blend_state.color.operation), ui);
+            selected_changed |= combo(("BlendOpAlpha", &mut blend_state.alpha.operation), ui);
         }
 
         self.app.recreate_pipelines |= selected_changed;
