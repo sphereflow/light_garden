@@ -111,7 +111,7 @@ impl Gui {
                         "Average Trace Time: {:.2}",
                         self.app.tracer.get_trace_time()
                     ));
-                    self.gui_contains_pointer = ui.ui_contains_pointer();
+                    self.gui_contains_pointer = ctx.is_pointer_over_area();
                 });
         }
 

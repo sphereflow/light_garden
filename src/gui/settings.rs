@@ -74,7 +74,6 @@ impl Gui {
         let mut selected_changed = false;
 
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
-
             let combo = |(text, var): (&str, &mut BlendFactor), ui: &mut Ui| {
                 ComboBox::from_label(text)
                     .selected_text(format!("{:?}", var))
@@ -86,13 +85,16 @@ impl Gui {
                     .response
                     .changed()
             };
+            let old_blend = blend_state.clone();
 
             selected_changed = [
                 combo(("ColorSrc", &mut blend_state.color.src_factor), ui),
                 combo(("ColorDst", &mut blend_state.color.dst_factor), ui),
                 combo(("AlphaSrc", &mut blend_state.alpha.src_factor), ui),
                 combo(("AlphaDst", &mut blend_state.alpha.dst_factor), ui),
-            ].iter().any(|b| *b);
+            ]
+            .iter()
+            .any(|b| *b);
 
             let blend_ops: &[BlendOperation] = &[
                 BlendOperation::Min,
@@ -103,7 +105,7 @@ impl Gui {
             ];
 
             let combo = |(text, var): (&str, &mut BlendOperation), ui: &mut Ui| {
-                ComboBox::from_label(text)
+                let res = ComboBox::from_label(text)
                     .selected_text(format!("{:?}", var))
                     .show_ui(ui, |ui| {
                         blend_ops.iter().for_each(|bo| {
@@ -111,11 +113,16 @@ impl Gui {
                         });
                     })
                     .response
-                    .changed()
+                    .changed();
+                if res {
+                    println!("combo changed");
+                }
+                res
             };
 
             selected_changed |= combo(("BlendOpColor", &mut blend_state.color.operation), ui);
             selected_changed |= combo(("BlendOpAlpha", &mut blend_state.alpha.operation), ui);
+            selected_changed = old_blend != *blend_state;
         }
 
         self.app.recreate_pipelines |= selected_changed;
