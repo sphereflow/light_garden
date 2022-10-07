@@ -24,7 +24,7 @@ pub struct Renderer {
     shader: ShaderModule,
     sub_rpass_lines: SubRenderPass,
     sub_rpass_triangles: SubRenderPass,
-    egui_rpass: egui_wgpu::renderer::RenderPass,
+    egui_rpass: egui_wgpu::renderer::Renderer,
     texture_renderer: TextureRenderer,
     surface_config: SurfaceConfiguration,
     pub make_screenshot: bool,
@@ -63,7 +63,7 @@ impl Renderer {
         let texture_renderer =
             TextureRenderer::init(device, surface_config, app.color_state_descriptor.clone());
 
-        let egui_rpass = egui_wgpu::renderer::RenderPass::new(&device, surface_config.format, 1);
+        let egui_rpass = egui_wgpu::renderer::Renderer::new(&device, surface_config.format, 1, 0);
 
         Renderer {
             shader,
@@ -371,7 +371,7 @@ impl Renderer {
                 &clipped_primitives,
                 &screen_descriptor,
             );
-            self.egui_rpass.execute_with_renderpass(
+            self.egui_rpass.render_onto_renderpass(
                 &mut rpass,
                 &clipped_primitives,
                 &screen_descriptor,
@@ -450,7 +450,7 @@ impl Renderer {
                     &clipped_primitives,
                     &screen_descriptor,
                 );
-                self.egui_rpass.execute_with_renderpass(
+                self.egui_rpass.render_onto_renderpass(
                     &mut rpass,
                     &clipped_primitives,
                     &screen_descriptor,

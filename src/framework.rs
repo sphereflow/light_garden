@@ -2,7 +2,7 @@ use crate::gui::{Gui, UiMode};
 use crate::renderer::Renderer;
 use winit::{
     event::{self, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
+    event_loop::{ControlFlow, EventLoop, EventLoopBuilder},
 };
 
 #[rustfmt::skip]
@@ -38,7 +38,7 @@ async fn setup(title: &str, width: u32, height: u32) -> Setup {
         env_logger::init();
     };
 
-    let event_loop = EventLoop::with_user_event();
+    let event_loop = EventLoopBuilder::with_user_event().build();
     let mut builder = winit::window::WindowBuilder::new();
     builder = builder.with_title(title);
     #[cfg(windows_OFF)] // TODO
@@ -153,6 +153,7 @@ fn start(
         width: size.width,
         height: size.height,
         present_mode: wgpu::PresentMode::Fifo,
+        alpha_mode: wgpu::CompositeAlphaMode::Auto,
     };
     println!("Surface config: {surface_config:?}");
     surface.configure(&device, &surface_config);
