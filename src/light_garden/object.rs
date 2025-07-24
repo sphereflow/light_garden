@@ -11,14 +11,8 @@ pub enum ObjectE {
     Rect(Rect),
     Lens(Lens),
     ConvexPolygon(ConvexPolygon),
+    Ellipse(Ellipse),
     Geo(Geo),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Object {
-    pub object_enum: ObjectE,
-    pub material_opt: Option<Material>,
-    pub moved: bool,
 }
 
 impl ObjectE {
@@ -40,9 +34,24 @@ impl ObjectE {
     pub fn new_convex_polygon(points: &[P2]) -> Self {
         ObjectE::ConvexPolygon(ConvexPolygon::new_convex_hull(points))
     }
+    pub fn new_ellipse(origin: P2, a: Float, b: Float) -> Self {
+        ObjectE::Ellipse(Ellipse {
+            origin,
+            a,
+            b,
+            rot: Rotation2::new(0.0),
+        })
+    }
     pub fn new_geo(geo: Geo) -> Self {
         ObjectE::Geo(geo)
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Object {
+    pub object_enum: ObjectE,
+    pub material_opt: Option<Material>,
+    pub moved: bool,
 }
 
 impl Object {
@@ -88,6 +97,13 @@ impl Object {
             moved: true,
         }
     }
+    pub fn new_ellipse(origin: P2, a: Float, b: Float) -> Self {
+        Object {
+            object_enum: ObjectE::new_ellipse(origin, a, b),
+            material_opt: Some(Material::default()),
+            moved: true,
+        }
+    }
     pub fn new_geo(geo: Geo) -> Self {
         Object {
             object_enum: ObjectE::Geo(geo),
@@ -112,6 +128,7 @@ impl HasOrigin for ObjectE {
             ObjectE::Rect(r) => r.get_origin(),
             ObjectE::Lens(l) => l.l.get_origin(),
             ObjectE::ConvexPolygon(cp) => cp.get_origin(),
+            ObjectE::Ellipse(e) => e.get_origin(),
             ObjectE::Geo(g) => g.get_origin(),
         }
     }
@@ -123,6 +140,7 @@ impl HasOrigin for ObjectE {
             ObjectE::Rect(r) => r.set_origin(origin),
             ObjectE::Lens(l) => l.l.set_origin(origin),
             ObjectE::ConvexPolygon(cp) => cp.set_origin(origin),
+            ObjectE::Ellipse(e) => e.set_origin(origin),
             ObjectE::Geo(g) => g.set_origin(origin),
         }
     }
@@ -147,6 +165,7 @@ impl Rotate for ObjectE {
             ObjectE::Rect(r) => r.get_rotation(),
             ObjectE::Lens(l) => l.l.get_rotation(),
             ObjectE::ConvexPolygon(cp) => cp.get_rotation(),
+            ObjectE::Ellipse(e) => e.get_rotation(),
             ObjectE::Geo(g) => g.get_rotation(),
         }
     }
@@ -158,6 +177,7 @@ impl Rotate for ObjectE {
             ObjectE::Rect(r) => r.set_rotation(rotation),
             ObjectE::Lens(l) => l.l.set_rotation(rotation),
             ObjectE::ConvexPolygon(cp) => cp.set_rotation(rotation),
+            ObjectE::Ellipse(e) => e.set_rotation(rotation),
             ObjectE::Geo(g) => g.set_rotation(rotation),
         }
     }
@@ -182,6 +202,7 @@ impl Mirror for ObjectE {
             ObjectE::Rect(r) => ObjectE::Rect(r.mirror_x()),
             ObjectE::Lens(l) => ObjectE::Lens(l.mirror_x()),
             ObjectE::ConvexPolygon(cp) => ObjectE::ConvexPolygon(cp.mirror_x()),
+            ObjectE::Ellipse(e) => ObjectE::Ellipse(e.mirror_x()),
             ObjectE::Geo(g) => ObjectE::Geo(g.mirror_x()),
         }
     }
@@ -193,6 +214,7 @@ impl Mirror for ObjectE {
             ObjectE::Rect(r) => ObjectE::Rect(r.mirror_y()),
             ObjectE::Lens(l) => ObjectE::Lens(l.mirror_y()),
             ObjectE::ConvexPolygon(cp) => ObjectE::ConvexPolygon(cp.mirror_y()),
+            ObjectE::Ellipse(e) => ObjectE::Ellipse(e.mirror_y()),
             ObjectE::Geo(g) => ObjectE::Geo(g.mirror_y()),
         }
     }
@@ -224,6 +246,7 @@ impl Contains for ObjectE {
             ObjectE::Rect(r) => r.contains(p),
             ObjectE::Lens(l) => l.get_logic().contains(p),
             ObjectE::ConvexPolygon(cp) => cp.contains(p),
+            ObjectE::Ellipse(e) => e.contains(p),
             ObjectE::Geo(g) => g.contains(p),
         }
     }
@@ -244,6 +267,7 @@ impl Distance for ObjectE {
             ObjectE::Rect(r) => r.distance(p),
             ObjectE::Lens(l) => l.get_logic().distance(p),
             ObjectE::ConvexPolygon(cp) => cp.distance(p),
+            ObjectE::Ellipse(e) => e.distance(p),
             ObjectE::Geo(g) => g.distance(p),
         }
     }
@@ -264,6 +288,7 @@ impl HasGeometry for ObjectE {
             ObjectE::Rect(r) => Geo::GeoRect(*r),
             ObjectE::Lens(l) => Geo::GeoLogic(l.get_logic()),
             ObjectE::ConvexPolygon(cp) => Geo::GeoConvexPolygon(cp.clone()),
+            ObjectE::Ellipse(e) => Geo::GeoEllipse(*e),
             ObjectE::Geo(g) => g.clone(),
         }
     }

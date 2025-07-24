@@ -125,7 +125,7 @@ impl TileMap {
     pub fn index(&self, ray: &Ray) -> Option<&Slab> {
         if self.tile_map_enabled {
             self.get_tile(&ray.get_origin())
-                .map(|tile| tile.index(&ray.get_direction()))
+                .map(|tile| tile.index_slab(&ray.get_direction()))
         } else {
             None
         }
@@ -209,7 +209,7 @@ impl Tile {
         }
     }
 
-    pub fn index(&self, direction: &U2) -> &Slab {
+    pub fn index_slab(&self, direction: &U2) -> &Slab {
         &self.slabs[self.get_index(direction)]
     }
 
@@ -312,20 +312,18 @@ impl Tile {
                         num_slabs,
                     })
                 }
+            } else if end - start < (num_slabs / 2) {
+                Some(SlabRange {
+                    start,
+                    end,
+                    num_slabs,
+                })
             } else {
-                if end - start < (num_slabs / 2) {
-                    Some(SlabRange {
-                        start,
-                        end,
-                        num_slabs,
-                    })
-                } else {
-                    Some(SlabRange {
-                        start: end,
-                        end: start,
-                        num_slabs,
-                    })
-                }
+                Some(SlabRange {
+                    start: end,
+                    end: start,
+                    num_slabs,
+                })
             }
         } else {
             None
@@ -346,7 +344,7 @@ impl Display for Tile {
         writeln!(f)?;
         writeln!(f, "Slabs:")?;
         for slab in &self.slabs {
-            writeln!(f, "{}", slab)?;
+            writeln!(f, "{slab}")?;
         }
         write!(f, "")
     }

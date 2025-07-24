@@ -76,16 +76,16 @@ impl Gui {
         if let Some(blend_state) = self.app.color_state_descriptor.blend.as_mut() {
             let combo = |(text, var): (&str, &mut BlendFactor), ui: &mut Ui| {
                 ComboBox::from_label(text)
-                    .selected_text(format!("{:?}", var))
+                    .selected_text(format!("{var:?}"))
                     .show_ui(ui, |ui| {
                         blend_factors.iter().for_each(|bf| {
-                            ui.selectable_value(var, *bf, format!("{:?}", bf));
+                            ui.selectable_value(var, *bf, format!("{bf:?}"));
                         });
                     })
                     .response
                     .changed()
             };
-            let old_blend = blend_state.clone();
+            let old_blend = *blend_state;
 
             selected_changed = [
                 combo(("ColorSrc", &mut blend_state.color.src_factor), ui),
@@ -106,10 +106,10 @@ impl Gui {
 
             let combo = |(text, var): (&str, &mut BlendOperation), ui: &mut Ui| {
                 let res = ComboBox::from_label(text)
-                    .selected_text(format!("{:?}", var))
+                    .selected_text(format!("{var:?}"))
                     .show_ui(ui, |ui| {
                         blend_ops.iter().for_each(|bo| {
-                            ui.selectable_value(var, *bo, format!("{:?}", bo));
+                            ui.selectable_value(var, *bo, format!("{bo:?}"));
                         });
                     })
                     .response
@@ -120,8 +120,12 @@ impl Gui {
                 res
             };
 
-            selected_changed |= combo(("BlendOpColor", &mut blend_state.color.operation), ui);
-            selected_changed |= combo(("BlendOpAlpha", &mut blend_state.alpha.operation), ui);
+            // ComboBox does not emit the changed signal seems to be a bug in egui
+            // selected_changed |= combo(("BlendOpColor", &mut blend_state.color.operation), ui);
+            // selected_changed |= combo(("BlendOpAlpha", &mut blend_state.alpha.operation), ui);
+            // workaround =>
+            let _ = combo(("BlendOpColor", &mut blend_state.color.operation), ui);
+            let _ = combo(("BlendOpAlpha", &mut blend_state.alpha.operation), ui);
             selected_changed = old_blend != *blend_state;
         }
 

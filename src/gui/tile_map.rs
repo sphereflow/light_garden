@@ -16,15 +16,15 @@ impl Gui {
 
     pub fn select_tile(&self, ui: &mut Ui) {
         if let Some(tile) = self.app.tracer.get_tile(&self.app.get_mouse_pos()) {
-            ui.label(format!("{}", tile));
+            ui.label(format!("{tile}"));
         }
     }
 
     pub fn tile_selected(&self, ui: &mut Ui, tile: &Tile) {
-        let slab = tile.index(&Unit::new_normalize(
+        let slab = tile.index_slab(&Unit::new_normalize(
             self.app.get_mouse_pos() - tile.aabb.get_origin(),
         ));
-        ui.label(format!("{}", slab));
+        ui.label(format!("{slab}"));
     }
 
     pub fn toggle_tile_map(&mut self, ui: &mut Ui) {

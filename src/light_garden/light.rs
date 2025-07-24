@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 
 use collision2d::geo::*;
 use na::Vector2;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub type Color = [f32; 4];
 
@@ -108,7 +108,7 @@ impl DirectionalLight {
         let n = self.start.get_normal();
         for i in 0..self.num_rays {
             self.rays.push(Ray::from_origin(
-                self.start.eval_at_r(-1. * i as f64 / self.num_rays as f64),
+                self.start.eval_at_r(-(i as f64) / self.num_rays as f64),
                 n.into_inner(),
             ));
         }

@@ -3,7 +3,6 @@ use collision2d::geo::*;
 use egui::*;
 use instant::Instant;
 use na::Complex;
-use std::f64::consts::PI;
 use wgpu::{BlendFactor, BlendOperation};
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -16,23 +15,15 @@ mod string_mod;
 mod tile_map;
 
 pub struct Gui {
-    pub winit_state: egui_winit::State,
-    pub scale_factor: f32,
     last_update_inst: Instant,
     last_cursor: Option<Pos2>,
     gui_contains_pointer: bool,
-    pub app: LightGarden,
     pub ui_mode: UiMode,
+    pub app: LightGarden,
 }
 
 impl Gui {
-    pub fn name(&self) -> &str {
-        "Light Garden"
-    }
-
-    pub fn update(&mut self, ctx: &Context, winit_window: &winit::window::Window) -> FullOutput {
-        let input = self.winit_state.take_egui_input(winit_window);
-        ctx.begin_frame(input);
+    pub fn update(&mut self, ctx: &Context) {
         let bdisplay_ui = matches!(
             self.app.mode,
             Mode::Selected
@@ -50,7 +41,7 @@ impl Gui {
             window
                 .default_size(Vec2::new(300.0, 100.0))
                 .show(ctx, |ui| {
-                    self.last_cursor = ui.input().pointer.interact_pos();
+                    ui.input(|i| self.last_cursor = i.pointer.interact_pos());
                     if let Some(mouse_pos) = self.last_cursor {
                         ui.label(format!(
                             "Mouse Position: ({:.1},{:.1})",
@@ -106,7 +97,7 @@ impl Gui {
                     }
 
                     let elapsed = self.last_update_inst.elapsed();
-                    ui.label(format!("Frametime: {:.2?}", elapsed));
+                    ui.label(format!("Frametime: {elapsed:.2?}"));
                     ui.label(format!(
                         "Average Trace Time: {:.2}",
                         self.app.tracer.get_trace_time()
@@ -116,32 +107,19 @@ impl Gui {
         }
 
         self.last_update_inst = Instant::now();
-        ctx.end_frame()
     }
 }
 
 impl Gui {
-    pub fn new(
-        winit_window: &winit::window::Window,
-        event_loop: &winit::event_loop::EventLoop<()>,
-        surface_config: &wgpu::SurfaceConfiguration,
-    ) -> Self {
-        let size = winit_window.inner_size();
+    pub fn new(app: LightGarden) -> Self {
         let last_update_inst = Instant::now();
-        let app = LightGarden::new(
-            collision2d::geo::Rect::from_tlbr(1., -1., -1., 1.),
-            surface_config.format,
-        );
-        let winit_state = egui_winit::State::new(&event_loop);
 
         Gui {
-            winit_state,
-            scale_factor: winit_window.scale_factor() as f32,
             last_update_inst,
             last_cursor: None,
             gui_contains_pointer: false,
-            app,
             ui_mode: UiMode::new(),
+            app,
         }
     }
 
@@ -272,6 +250,9 @@ impl Gui {
             }
             if ui.button("Add C(u)rved Mirror").clicked() {
                 self.app.mode = Mode::DrawCurvedMirror { points: Vec::new() };
+            }
+            if ui.button("Add (E)llipse").clicked() {
+                self.app.mode = Mode::DrawEllipseOrigin;
             }
         }
     }

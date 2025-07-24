@@ -11,7 +11,6 @@ pub use object::*;
 use rayon::prelude::*;
 use std::{
     collections::VecDeque,
-    f64::consts::*,
     sync::{Arc, Mutex},
 };
 pub use string_mod::*;
@@ -54,9 +53,10 @@ pub struct LightGarden {
 }
 
 impl LightGarden {
-    pub fn new(canvas_bounds: Rect, descriptor_format: wgpu::TextureFormat) -> LightGarden {
+    pub fn new(canvas_bounds: Rect) -> LightGarden {
         let color_state_descriptor = wgpu::ColorTargetState {
-            format: descriptor_format,
+            // placeholder value
+            format: wgpu::TextureFormat::Bgra8UnormSrgb,
             blend: Some(BlendState {
                 alpha: wgpu::BlendComponent {
                     src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -123,21 +123,15 @@ impl LightGarden {
     }
 
     pub fn update(&mut self) {
-        match self.save_file_path.clone().try_lock() {
-            Ok(mut guard) => {
-                if let Some(path) = guard.take() {
-                    self.load_from_file(&path);
-                }
+        if let Ok(mut guard) = self.save_file_path.clone().try_lock() {
+            if let Some(path) = guard.take() {
+                self.save_to_file(&path);
             }
-            _ => {}
         }
-        match self.load_file_path.clone().try_lock() {
-            Ok(mut guard) => {
-                if let Some(path) = guard.take() {
-                    self.load_from_file(&path);
-                }
+        if let Ok(mut guard) = self.load_file_path.clone().try_lock() {
+            if let Some(path) = guard.take() {
+                self.load_from_file(&path);
             }
-            _ => {}
         }
         match &self.mode {
             Mode::DrawMirrorEnd { start } => {
@@ -212,6 +206,35 @@ impl LightGarden {
                 {
                     directional_light.y_axis_look_at(&mouse_pos);
                 }
+                if let Some(ix) = self.selected_object {
+                    self.drawer
+                        .draw_selector(&mut self.tracer.index_object(ix).get_aabb(), 0.03);
+                    if let Object {
+                        object_enum: ObjectE::Ellipse(e),
+                        ..
+                    } = self.tracer.index_object(ix)
+                    {
+                        let color = [0.5, 1.0, 1.0, 1.0];
+                        self.drawer.draw_geo(Geo::GeoEllipse(*e), color);
+                        let mut top_line = e.tangent_at_angle(-e.rot.angle());
+                        top_line.origin = e.rot * top_line.origin;
+                        top_line.set_direction(e.rot * top_line.get_direction());
+                        top_line.origin += e.origin.coords;
+                        self.drawer.draw_geo(top_line.origin, color);
+                        let aabb_circle = Circle {
+                            origin: e.origin,
+                            radius: (e.a * e.a + e.b * e.b).sqrt(),
+                        };
+                        if let Some(b) = aabb_circle.intersect(&top_line) {
+                            let top_line_segment = LineSegment::from_ab(
+                                top_line.eval_at_r(b.0),
+                                top_line.eval_at_r(b.1),
+                            );
+                            self.drawer.draw_geo(top_line_segment, color);
+                        }
+                        self.drawer.draw_geo(aabb_circle, color);
+                    }
+                }
             }
 
             Mode::SelectTile => {
@@ -228,7 +251,7 @@ impl LightGarden {
             }
 
             Mode::TileSelected { tile } => {
-                let slab = tile.index(&Unit::new_normalize(
+                let slab = tile.index_slab(&Unit::new_normalize(
                     self.mouse_pos - tile.aabb.get_origin(),
                 ));
                 self.drawer.draw_aabb(&tile.aabb, [1.0, 0.0, 0.0, 1.0]);
@@ -258,11 +281,23 @@ impl LightGarden {
                 if let Some(ix) = self.selected_object {
                     self.drawer
                         .draw_selector(&mut self.tracer.index_object(ix).get_aabb(), 0.03);
+                    if let Object {
+                        object_enum: ObjectE::Ellipse(e),
+                        ..
+                    } = self.tracer.index_object(ix)
+                    {
+                        self.drawer
+                            .draw_geo(Geo::GeoEllipse(*e), [0.5, 1.0, 1.0, 1.0]);
+                    }
                 }
             }
 
             _ => {}
         }
+    }
+
+    pub fn resumed(&mut self, surface_config: &wgpu::SurfaceConfiguration) {
+        self.color_state_descriptor.format = surface_config.format;
     }
 
     pub fn get_canvas_bounds(&self) -> Rect {
@@ -330,7 +365,6 @@ impl LightGarden {
                         if current_ix == click_ix {
                             // both objects are the same -> abort
                             self.mode = Mode::Selected;
-                            return;
                         } else {
                             let geo_a = self.tracer.index_object(current_ix).get_geometry();
                             let geo_b = self.tracer.index_object(click_ix).get_geometry();
@@ -474,6 +508,29 @@ impl LightGarden {
                         }));
                     self.mode = Mode::Selecting(None);
                 }
+            }
+
+            Mode::DrawEllipseOrigin => {
+                self.mode = Mode::DrawEllipseA {
+                    origin: self.mouse_pos,
+                };
+            }
+
+            Mode::DrawEllipseA { origin } => {
+                let dif = self.mouse_pos.x - origin.x;
+                self.mode = Mode::DrawEllipseB {
+                    origin: *origin,
+                    a: dif.abs(),
+                };
+            }
+
+            Mode::DrawEllipseB { origin, a } => {
+                let dif = self.mouse_pos.y - origin.y;
+                self.tracer
+                    .push_object(Object::new_ellipse(*origin, *a, dif.abs()));
+                self.mode = Mode::Selecting(None);
+                self.tracer.finish_drawing_object(false);
+                self.tracer.drawing_object_changed();
             }
 
             Mode::SelectTile => {
@@ -621,7 +678,7 @@ impl LightGarden {
 
     pub fn set_render_to_texture(&mut self, render_to_texture: bool) {
         if render_to_texture != self.render_to_texture {
-            println!("render_to_texture toggled: {}", render_to_texture);
+            println!("render_to_texture toggled: {render_to_texture}");
             self.render_to_texture = render_to_texture;
             self.recreate_pipelines = true;
         }
@@ -650,14 +707,14 @@ impl LightGarden {
             path,
             self.tracer
                 .serialize()
-                .expect(&format!("Could not serialize RON file: {}", path)),
+                .unwrap_or_else(|_| panic!("Could not serialize RON file: {path}")),
         )
-        .expect(&format!("Could not load RON file: {}", path));
+        .unwrap_or_else(|_| panic!("Could not load RON file: {path}"));
     }
 
     pub fn load_from_file(&mut self, path: &str) {
         let serialized_bytes =
-            std::fs::read(path).expect(&format!("Could not read file: {}", path));
+            std::fs::read(path).unwrap_or_else(|_| panic!("Could not read file: {path}"));
         if let Ok((mut objects, mut lights)) =
             ron::de::from_bytes::<(Vec<Object>, Vec<Light>)>(&serialized_bytes)
         {
@@ -690,6 +747,9 @@ pub enum Mode {
     DrawRectEnd { start: P2 },
     DrawConvexPolygon { points: Vec<P2> },
     DrawCurvedMirror { points: Vec<P2> },
+    DrawEllipseOrigin,
+    DrawEllipseA { origin: P2 },
+    DrawEllipseB { origin: P2, a: Float },
     DrawPointLight,
     DrawSpotLightStart,
     DrawSpotLightEnd { origin: P2 },
@@ -705,28 +765,31 @@ use std::fmt::{Display, Formatter, Result};
 impl Display for Mode {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
         match self {
-            Self::Selecting(None) => write!(f, "Selecting(None)"),
-            Self::Selecting(Some(op)) => write!(f, "Selecting({:?})", op),
-            Self::Selected => write!(f, "Selected"),
-            Self::Moving => write!(f, "Moving"),
-            Self::Rotate => write!(f, "Rotate"),
-            Self::EditObject => write!(f, "EditObject"),
-            Self::DrawMirrorStart => write!(f, "DrawMirrorStart"),
-            Self::DrawMirrorEnd { start: _ } => write!(f, "DrawMirrorEnd"),
-            Self::DrawCircleStart => write!(f, "DrawCircleStart"),
-            Self::DrawCircleEnd { .. } => write!(f, "DrawCircleEnd"),
-            Self::DrawRectStart => write!(f, "DrawRectStart"),
-            Self::DrawRectEnd { .. } => write!(f, "DrawRectEnd"),
-            Self::DrawConvexPolygon { .. } => write!(f, "DrawConvexPolygon"),
-            Self::DrawCurvedMirror { .. } => write!(f, "DrawBezier"),
-            Self::DrawPointLight => write!(f, "DrawPointLight"),
-            Self::DrawSpotLightStart => write!(f, "DrawSpotLightStart"),
-            Self::DrawSpotLightEnd { .. } => write!(f, "DrawSpotLightEnd"),
-            Self::DrawDirectionalLightStart => write!(f, "DrawDirectionalLightStart"),
-            Self::DrawDirectionalLightEnd { .. } => write!(f, "DrawDirectionalLightEnd"),
-            Self::SelectTile => write!(f, "SelectTile"),
-            Self::TileSelected { .. } => write!(f, "TileSelected"),
-            Self::StringMod => write!(f, "StringMod"),
+            Mode::Selecting(None) => write!(f, "Selecting(None)"),
+            Mode::Selecting(Some(op)) => write!(f, "Selecting({op:?})"),
+            Mode::Selected => write!(f, "Selected"),
+            Mode::Moving => write!(f, "Moving"),
+            Mode::Rotate => write!(f, "Rotate"),
+            Mode::EditObject => write!(f, "EditObject"),
+            Mode::DrawMirrorStart => write!(f, "DrawMirrorStart"),
+            Mode::DrawMirrorEnd { start: _ } => write!(f, "DrawMirrorEnd"),
+            Mode::DrawCircleStart => write!(f, "DrawCircleStart"),
+            Mode::DrawCircleEnd { .. } => write!(f, "DrawCircleEnd"),
+            Mode::DrawRectStart => write!(f, "DrawRectStart"),
+            Mode::DrawRectEnd { .. } => write!(f, "DrawRectEnd"),
+            Mode::DrawConvexPolygon { .. } => write!(f, "DrawConvexPolygon"),
+            Mode::DrawCurvedMirror { .. } => write!(f, "DrawBezier"),
+            Mode::DrawPointLight => write!(f, "DrawPointLight"),
+            Mode::DrawSpotLightStart => write!(f, "DrawSpotLightStart"),
+            Mode::DrawSpotLightEnd { .. } => write!(f, "DrawSpotLightEnd"),
+            Mode::DrawDirectionalLightStart => write!(f, "DrawDirectionalLightStart"),
+            Mode::DrawDirectionalLightEnd { .. } => write!(f, "DrawDirectionalLightEnd"),
+            Mode::SelectTile => write!(f, "SelectTile"),
+            Mode::TileSelected { .. } => write!(f, "TileSelected"),
+            Mode::StringMod => write!(f, "StringMod"),
+            Mode::DrawEllipseOrigin => write!(f, "DrawEllipseOrigin"),
+            Mode::DrawEllipseA { .. } => write!(f, "DrawEllipseA"),
+            Mode::DrawEllipseB { .. } => write!(f, "DrawEllipseB"),
         }
     }
 }

@@ -1,5 +1,5 @@
 use crate::light_garden::*;
-use std::slice::Iter;
+use std::{mem, slice::Iter};
 
 pub struct Tracer {
     objects: Vec<Object>,
@@ -28,7 +28,7 @@ impl Tracer {
         for obj in objects.iter() {
             tile_map.push_obj(obj);
         }
-        println!("canvas_bounds: {:?}", canvas_bounds);
+        println!("canvas_bounds: {canvas_bounds:?}");
         Tracer {
             lights: vec![light],
             objects,
@@ -402,7 +402,7 @@ impl Tracer {
         if self.trace_time_vd.len() > 20 {
             self.trace_time_vd.pop_front();
         }
-
+        self.debug_key_pressed = false;
         all_lines
     }
 
@@ -431,17 +431,14 @@ impl Tracer {
                 {
                     continue;
                 }
-                let overlaps = match self
+                let overlaps = self
                     .tile_map
                     .get_tile(&ray.get_origin())
                     .map(|tile| tile.get_overlaps())
-                {
-                    Some(o) => o,
-                    None => vec![],
-                };
+                    .unwrap_or_default();
 
                 // find the nearest object
-                let mut nearest: Float = std::f64::MAX;
+                let mut nearest: Float = f64::MAX;
                 // (intersection point, normal, object index)
                 let mut nearest_target: Option<(P2, Normal, usize)> = None;
                 if self.tile_map.tile_map_enabled {
@@ -500,6 +497,18 @@ impl Tracer {
                             refracted_refractive_index,
                         );
                         let (reflected, orefracted, reflectance) = result;
+                        if let ObjectE::Ellipse(e) = obj.object_enum {
+                            if self.debug_key_pressed {
+                                dbg!(
+                                    ray,
+                                    intersection,
+                                    normal,
+                                    reflected,
+                                    orefracted,
+                                    reflectance
+                                );
+                            }
+                        }
                         rays.push((ray.get_origin(), *color));
                         rays.push((reflected.get_origin(), *color));
 
@@ -507,15 +516,15 @@ impl Tracer {
                         let omrefl = 1. - refl;
                         let reflected_color =
                             [color[0] * refl, color[1] * refl, color[2] * refl, color[3]];
-                        let refracted_color = [
-                            color[0] * omrefl,
-                            color[1] * omrefl,
-                            color[2] * omrefl,
-                            color[3],
-                        ];
                         back_buffer.push((reflected, reflected_color, *refractive_index));
                         // self.trace(rays, &reflected, color1, refractive_index, max_bounce);
                         if let Some(refracted) = orefracted {
+                            let refracted_color = [
+                                color[0] * omrefl,
+                                color[1] * omrefl,
+                                color[2] * omrefl,
+                                color[3],
+                            ];
                             back_buffer.push((
                                 refracted,
                                 refracted_color,
@@ -540,8 +549,7 @@ impl Tracer {
                 }
             }
             trace_rays.clear();
-            trace_rays.extend(back_buffer.into_iter());
-            back_buffer = Vec::new();
+            mem::swap(&mut trace_rays, &mut back_buffer);
         }
     }
 }

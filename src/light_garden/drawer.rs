@@ -81,6 +81,21 @@ impl Drawer {
                     self.draw_line_segment(&ls, color);
                 }
             }
+            Geo::GeoEllipse(e) => {
+                let num_line_segments = 400;
+                let first = e.eval_at_t(0.0);
+                let mut a;
+                let mut b = first;
+                for ti in 0..=num_line_segments {
+                    let t = ti as f64 * TAU / num_line_segments as f64;
+                    a = b;
+                    b = e.eval_at_t(t);
+                    self.lines.push((e.origin + e.rot * a.coords, color));
+                    self.lines.push((e.origin + e.rot * b.coords, color));
+                }
+                self.lines.push((e.origin + e.rot * b.coords, color));
+                self.lines.push((e.origin + e.rot * first.coords, color));
+            }
         }
     }
 
@@ -104,7 +119,9 @@ impl Drawer {
         self.draw_geo(aabb.to_rect(), color);
     }
 
-    pub fn draw_origin(&mut self, p: &P2, color: Color) {}
+    pub fn draw_origin(&mut self, p: &P2, color: Color) {
+        self.draw_point(p, color);
+    }
 
     pub fn draw_selector(&mut self, aabb: &mut Aabb, corner_length: f64) {
         self.draw_selector_part(&aabb.points(), [0., 0., 0., 1.], corner_length * 1.2);
@@ -151,13 +168,11 @@ impl Drawer {
     }
 
     pub fn get_lines(&mut self) -> Vec<(P2, Color)> {
-        let lines = std::mem::take(&mut self.lines);
-        lines
+        std::mem::take(&mut self.lines)
     }
 
     pub fn get_triangles(&mut self) -> Vec<(P2, Color)> {
-        let triangles = std::mem::take(&mut self.triangles);
-        triangles
+        std::mem::take(&mut self.triangles)
     }
 
     pub fn resize(&mut self, new_canvas_bounds: &Rect) {

@@ -4,10 +4,10 @@ use crate::sub_render_pass::SubRenderPass;
 use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};
 use bytemuck::{Pod, Zeroable};
 use egui::FullOutput;
-use egui_wgpu::renderer::ScreenDescriptor;
+use egui_wgpu::ScreenDescriptor;
 use half::f16;
 use image::save_buffer_with_format;
-use std::{iter, num::NonZeroU32};
+use std::iter;
 use wgpu::*;
 
 #[repr(C)]
@@ -24,7 +24,7 @@ pub struct Renderer {
     shader: ShaderModule,
     sub_rpass_lines: SubRenderPass,
     sub_rpass_triangles: SubRenderPass,
-    egui_rpass: egui_wgpu::renderer::Renderer,
+    egui_rpass: egui_wgpu::Renderer,
     texture_renderer: TextureRenderer,
     surface_config: SurfaceConfiguration,
     pub make_screenshot: bool,
@@ -63,7 +63,7 @@ impl Renderer {
         let texture_renderer =
             TextureRenderer::init(device, surface_config, app.color_state_descriptor.clone());
 
-        let egui_rpass = egui_wgpu::renderer::Renderer::new(&device, surface_config.format, 1, 0);
+        let egui_rpass = egui_wgpu::Renderer::new(device, surface_config.format, None, 1, false);
 
         Renderer {
             shader,
@@ -122,17 +122,17 @@ impl Renderer {
         };
         let black: Vec<[f32; 4]> = vec![[0., 0., 0., 1.]; size];
         queue.write_texture(
-            ImageCopyTexture {
+            TexelCopyTextureInfo {
                 texture: &self.texture_renderer.render_texture,
                 mip_level: 0,
                 origin: Origin3d::ZERO,
                 aspect: TextureAspect::All,
             },
             bytemuck::cast_slice(black.as_slice()),
-            ImageDataLayout {
+            TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(self.surface_config.width * 4 * 4),
-                rows_per_image: NonZeroU32::new(self.surface_config.height),
+                bytes_per_row: Some(self.surface_config.width * 4 * 4),
+                rows_per_image: Some(self.surface_config.height),
             },
             dimensions,
         );
@@ -150,11 +150,13 @@ impl Renderer {
                     view: &view,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
+                        store: StoreOp::Store,
                     },
                     resolve_target: None,
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             self.sub_rpass_lines.render(&mut rpass);
             self.sub_rpass_triangles.render(&mut rpass);
@@ -190,6 +192,7 @@ impl Renderer {
             format,
             usage: TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
             label: None,
+            view_formats: &[],
         });
         let view = &texture.create_view(&TextureViewDescriptor::default());
         let mut screenshot_encoder = device.create_command_encoder(&CommandEncoderDescriptor {
@@ -203,15 +206,17 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
+                        store: StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
             self.sub_rpass_lines.render(&mut rpass);
             self.sub_rpass_triangles.render(&mut rpass);
         }
-        let copy_wrapper = ImageCopyTexture {
+        let copy_wrapper = TexelCopyTextureInfo {
             texture: &texture,
             mip_level: 0,
             origin: Origin3d::ZERO,
@@ -230,12 +235,12 @@ impl Renderer {
             usage: BufferUsages::MAP_READ | BufferUsages::COPY_DST,
         };
         let buff: Buffer = device.create_buffer(&buff_desc);
-        let copy_buffer = ImageCopyBuffer {
+        let copy_buffer = TexelCopyBufferInfo {
             buffer: &buff,
-            layout: ImageDataLayout {
+            layout: TexelCopyBufferLayout {
                 offset: 0,
-                bytes_per_row: NonZeroU32::new(padded_bytes_per_row),
-                rows_per_image: NonZeroU32::new(self.surface_config.height),
+                bytes_per_row: Some(padded_bytes_per_row),
+                rows_per_image: Some(self.surface_config.height),
             },
         };
         screenshot_encoder.copy_texture_to_buffer(copy_wrapper, copy_buffer, texture_extent);
@@ -243,7 +248,7 @@ impl Renderer {
         queue.submit(iter::once(screenshot_encoder.finish()));
         let buffer_slice = buff.slice(..);
         let bytes_future = buffer_slice.map_async(MapMode::Read, |_arg| {});
-        device.poll(Maintain::Wait);
+        device.poll(PollType::Wait);
 
         if let () = bytes_future {
             let padded_buffer = buffer_slice.get_mapped_range();
@@ -268,7 +273,7 @@ impl Renderer {
                 Ok(()) => {}
                 Err(e) => {
                     println!("Error: could not make screenshot");
-                    println!("Message: {}", e);
+                    println!("Message: {e}");
                 }
             };
             drop(padded_buffer);
@@ -299,21 +304,21 @@ impl Renderer {
         queue: &Queue,
         encoder: &mut CommandEncoder,
         frame: &SurfaceTexture,
-        gui: &mut Gui,
+        app: &mut LightGarden,
         output: FullOutput,
         context: &egui::Context,
         scale_factor: f32,
     ) {
         self.clear_render_texture(queue);
         self.render_to_texture(encoder);
-        if gui.app.recreate_pipelines {
+        if app.recreate_pipelines {
             let (pipeline, _bind_group_layout, bind_group, _sampler) =
                 TextureRenderer::create_pipeline(
                     device,
                     &self.surface_config,
                     &self.texture_renderer.shader,
                     &self.texture_renderer.render_texture,
-                    gui.app.color_state_descriptor.clone(),
+                    app.color_state_descriptor.clone(),
                 );
             self.texture_renderer.pipeline = pipeline;
             self.texture_renderer.bind_group = bind_group;
@@ -328,6 +333,25 @@ impl Renderer {
 
         {
             let view = frame.texture.create_view(&TextureViewDescriptor::default());
+            let clipped_primitives = context.tessellate(output.shapes, 1.0);
+
+            // Upload all resources for the GPU.
+            let screen_descriptor = egui_wgpu::ScreenDescriptor {
+                size_in_pixels: [self.surface_config.width, self.surface_config.height],
+                pixels_per_point: scale_factor,
+            };
+
+            for (id, image_delta) in &output.textures_delta.set {
+                self.egui_rpass
+                    .update_texture(device, queue, *id, image_delta);
+            }
+            self.egui_rpass.update_buffers(
+                device,
+                queue,
+                encoder,
+                &clipped_primitives,
+                &screen_descriptor,
+            );
             let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
                 label: Some("rpass: RenderPassDescriptor"),
                 color_attachments: &[Some(RenderPassColorAttachment {
@@ -335,10 +359,12 @@ impl Renderer {
                     resolve_target: None,
                     ops: Operations {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
-                        store: true,
+                        store: StoreOp::Store,
                     },
                 })],
                 depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
             });
 
             rpass.set_pipeline(&self.texture_renderer.pipeline);
@@ -350,32 +376,14 @@ impl Renderer {
             );
             // vertex range, instance range
             rpass.draw_indexed(0..self.texture_renderer.index_buffer_size, 0, 0..1);
-            let clipped_primitives = context.tessellate(output.shapes);
-
-            // Upload all resources for the GPU.
-            let screen_descriptor = egui_wgpu::renderer::ScreenDescriptor {
-                size_in_pixels: [self.surface_config.width, self.surface_config.height],
-                pixels_per_point: scale_factor,
-            };
-
-            for (id, image_delta) in &output.textures_delta.set {
-                self.egui_rpass
-                    .update_texture(&device, &queue, *id, image_delta);
-            }
+            self.egui_rpass.render(
+                &mut rpass.forget_lifetime(),
+                &clipped_primitives,
+                &screen_descriptor,
+            );
             for id in &output.textures_delta.free {
                 self.egui_rpass.free_texture(id);
             }
-            self.egui_rpass.update_buffers(
-                &device,
-                &queue,
-                &clipped_primitives,
-                &screen_descriptor,
-            );
-            self.egui_rpass.render_onto_renderpass(
-                &mut rpass,
-                &clipped_primitives,
-                &screen_descriptor,
-            );
         }
     }
 
@@ -384,12 +392,12 @@ impl Renderer {
         frame: &SurfaceTexture,
         device: &Device,
         queue: &Queue,
-        gui: &mut Gui,
+        app: &mut LightGarden,
         output: FullOutput,
         context: &egui::Context,
         scale_factor: f32,
     ) {
-        let render_result = gui.app.draw();
+        let render_result = app.draw();
         self.sub_rpass_lines
             .update_vertex_buffer(device, &render_result.lines);
         self.sub_rpass_triangles
@@ -397,18 +405,16 @@ impl Renderer {
         let mut encoder = device.create_command_encoder(&CommandEncoderDescriptor {
             label: Some("Command Encoder"),
         });
-
-        if gui.app.recreate_pipelines {
-            self.recreate_pipelines(device, queue, &mut gui.app);
+        if app.recreate_pipelines {
+            self.recreate_pipelines(device, queue, app);
         }
-
-        if gui.app.get_render_to_texture() {
+        if app.get_render_to_texture() {
             self.render_texture(
                 device,
                 queue,
                 &mut encoder,
                 frame,
-                gui,
+                app,
                 output,
                 context,
                 scale_factor,
@@ -416,22 +422,7 @@ impl Renderer {
         } else {
             {
                 let view = frame.texture.create_view(&TextureViewDescriptor::default());
-                let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
-                    label: Some("rpass: RenderPassDescriptor"),
-                    color_attachments: &[Some(RenderPassColorAttachment {
-                        view: &view,
-                        resolve_target: None,
-                        ops: Operations {
-                            load: LoadOp::Clear(wgpu::Color::BLACK),
-                            store: true,
-                        },
-                    })],
-                    depth_stencil_attachment: None,
-                });
-                self.sub_rpass_lines.render(&mut rpass);
-                self.sub_rpass_triangles.render(&mut rpass);
-
-                let clipped_primitives = context.tessellate(output.shapes);
+                let clipped_primitives = context.tessellate(output.shapes, 1.0);
                 // Upload all resources for the GPU.
                 let screen_descriptor = ScreenDescriptor {
                     size_in_pixels: [self.surface_config.width, self.surface_config.height],
@@ -439,25 +430,42 @@ impl Renderer {
                 };
                 for (id, image_delta) in &output.textures_delta.set {
                     self.egui_rpass
-                        .update_texture(&device, &queue, *id, image_delta);
+                        .update_texture(device, queue, *id, image_delta);
                 }
+                self.egui_rpass.update_buffers(
+                    device,
+                    queue,
+                    &mut encoder,
+                    &clipped_primitives,
+                    &screen_descriptor,
+                );
+                let mut rpass = encoder.begin_render_pass(&RenderPassDescriptor {
+                    label: Some("rpass: RenderPassDescriptor"),
+                    color_attachments: &[Some(RenderPassColorAttachment {
+                        view: &view,
+                        resolve_target: None,
+                        ops: Operations {
+                            load: LoadOp::Clear(wgpu::Color::BLACK),
+                            store: StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                });
+                self.sub_rpass_lines.render(&mut rpass);
+                self.sub_rpass_triangles.render(&mut rpass);
+
+                self.egui_rpass.render(
+                    &mut rpass.forget_lifetime(),
+                    &clipped_primitives,
+                    &screen_descriptor,
+                );
                 for id in &output.textures_delta.free {
                     self.egui_rpass.free_texture(id);
                 }
-                self.egui_rpass.update_buffers(
-                    &device,
-                    &queue,
-                    &clipped_primitives,
-                    &screen_descriptor,
-                );
-                self.egui_rpass.render_onto_renderpass(
-                    &mut rpass,
-                    &clipped_primitives,
-                    &screen_descriptor,
-                );
             }
         }
-
         queue.submit(iter::once(encoder.finish()));
     }
 }

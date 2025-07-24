@@ -48,7 +48,6 @@ impl SubRenderPass {
         app: &mut LightGarden,
         primitive_topology: PrimitiveTopology,
     ) -> (RenderPipeline, BindGroup) {
-        app.recreate_pipelines = false;
         // layout for the projection matrix
         let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
             label: Some("Renderer: bind group layout"),
@@ -112,17 +111,19 @@ impl SubRenderPass {
                 layout: Some(&pipeline_layout),
                 vertex: VertexState {
                     module: shader,
-                    entry_point: "vs_main",
+                    entry_point: Some("vs_main"),
                     buffers: &[wgpu::VertexBufferLayout {
                         array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                         step_mode: VertexStepMode::Vertex,
                         attributes: &vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
                     }],
+                    compilation_options: Default::default(),
                 },
                 fragment: Some(FragmentState {
                     module: shader,
-                    entry_point: "fs_main",
+                    entry_point: Some("fs_main"),
                     targets: &[Some(app.color_state_descriptor.clone())],
+                    compilation_options: Default::default(),
                 }),
                 // render lines
                 primitive: PrimitiveState {
@@ -136,6 +137,7 @@ impl SubRenderPass {
                     ..Default::default()
                 },
                 multiview: None,
+                cache: None,
             }),
             bind_group,
         )
@@ -149,8 +151,14 @@ impl SubRenderPass {
         shader: &ShaderModule,
         app: &mut LightGarden,
     ) {
-        let (pipeline, bind_group) =
-            SubRenderPass::create_pipeline(surface_config, device, queue, shader, app, self.topology);
+        let (pipeline, bind_group) = SubRenderPass::create_pipeline(
+            surface_config,
+            device,
+            queue,
+            shader,
+            app,
+            self.topology,
+        );
         self.pipeline = pipeline;
         self.matrix_bind_group = bind_group;
     }
@@ -173,9 +181,11 @@ impl SubRenderPass {
     }
 
     pub fn render<'a>(&'a self, rpass: &mut RenderPass<'a>) {
-        rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
-        rpass.set_pipeline(&self.pipeline);
-        rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
-        rpass.draw(0..(self.buffer_length as u32), 0..1); // vertex range, instance range
+        if self.buffer_length > 0 {
+            rpass.set_bind_group(0, &self.matrix_bind_group, &[]);
+            rpass.set_pipeline(&self.pipeline);
+            rpass.set_vertex_buffer(0, self.vertex_buffer.slice(..)); // slot 0
+            rpass.draw(0..(self.buffer_length as u32), 0..1); // vertex range, instance range
+        }
     }
 }

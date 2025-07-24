@@ -76,6 +76,7 @@ impl TextureRenderer {
             usage: TextureUsages::RENDER_ATTACHMENT
                 | TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_DST,
+            view_formats: &[],
         });
 
         use std::borrow::Cow;
@@ -141,17 +142,19 @@ impl TextureRenderer {
             layout: Some(&pipeline_layout),
             vertex: VertexState {
                 module: shader,
-                entry_point: "vs_main",
+                entry_point: Some("vs_main"),
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: VertexStepMode::Vertex,
                     attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4, 2 => Float32x2],
                 }],
+                compilation_options: Default::default(),
             },
             fragment: Some(FragmentState {
                 module: shader,
-                entry_point: "fs_main",
+                entry_point: Some("fs_main"),
                 targets: &[Some(color_state_descriptor)],
+                compilation_options: Default::default(),
             }),
             // render lines
             primitive: PrimitiveState {
@@ -164,6 +167,7 @@ impl TextureRenderer {
                 ..Default::default()
             },
             multiview: None,
+            cache: None,
         }), bind_group_layout, bind_group, sampler)
     }
 
@@ -235,6 +239,7 @@ impl TextureRenderer {
             usage: TextureUsages::RENDER_ATTACHMENT
                 | TextureUsages::TEXTURE_BINDING
                 | TextureUsages::COPY_DST,
+            view_formats: &[],
         });
     }
 }

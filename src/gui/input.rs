@@ -1,3 +1,5 @@
+use winit::keyboard::NamedKey;
+
 use super::*;
 
 impl Gui {
@@ -8,12 +10,13 @@ impl Gui {
     ) {
         use winit::event;
         use winit::event::WindowEvent;
-        type Key = event::VirtualKeyCode;
+        use winit::keyboard::Key;
+
         match event {
-            winit::event::WindowEvent::KeyboardInput { input, .. } => {
-                if winit::event::ElementState::Released == input.state {
-                    match (input.virtual_keycode, self.ui_mode) {
-                        (Some(Key::Escape), ui_mode) => match ui_mode {
+            winit::event::WindowEvent::KeyboardInput { event, .. } => {
+                if winit::event::ElementState::Released == event.state {
+                    match (event.logical_key.as_ref(), self.ui_mode) {
+                        (Key::Named(NamedKey::Escape), ui_mode) => match ui_mode {
                             UiMode::Main => {}
                             UiMode::Add => {
                                 self.ui_mode = UiMode::Main;
@@ -35,60 +38,66 @@ impl Gui {
                             }
                             UiMode::Exiting => {}
                         },
-                        (Some(Key::B), _ui_mode) => self.app.tracer.debug_key_pressed = true,
-                        (Some(Key::A), UiMode::Main) => self.ui_mode = UiMode::Add,
-                        (Some(Key::E), UiMode::Main) => self.ui_mode = UiMode::Settings,
-                        (Some(Key::T), UiMode::Main) => {
+                        (Key::Character("b"), _ui_mode) => self.app.tracer.debug_key_pressed = true,
+                        (Key::Character("a"), UiMode::Main) => self.ui_mode = UiMode::Add,
+                        (Key::Character("e"), UiMode::Main) => self.ui_mode = UiMode::Settings,
+                        (Key::Character("t"), UiMode::Main) => {
                             self.ui_mode = UiMode::TileMap;
                             self.app.mode = Mode::SelectTile;
                         }
-                        (Some(Key::R), UiMode::Main) => {
+                        (Key::Character("r"), UiMode::Main) => {
                             self.app.mode = Mode::StringMod;
                             self.ui_mode = UiMode::StringMod;
                         }
 
-                        (Some(Key::P), UiMode::Add) => self.app.mode = Mode::DrawPointLight,
-                        (Some(Key::S), UiMode::Add) => self.app.mode = Mode::DrawSpotLightStart,
-                        (Some(Key::D), UiMode::Add) => {
+                        (Key::Character("p"), UiMode::Add) => self.app.mode = Mode::DrawPointLight,
+                        (Key::Character("s"), UiMode::Add) => {
+                            self.app.mode = Mode::DrawSpotLightStart
+                        }
+                        (Key::Character("d"), UiMode::Add) => {
                             self.app.mode = Mode::DrawDirectionalLightStart
                         }
 
-                        (Some(Key::R), UiMode::Add) => self.app.mode = Mode::DrawRectStart,
-                        (Some(Key::C), UiMode::Add) => self.app.mode = Mode::DrawCircleStart,
-                        (Some(Key::M), UiMode::Add) => self.app.mode = Mode::DrawMirrorStart,
-                        (Some(Key::V), UiMode::Add) => {
+                        (Key::Character("r"), UiMode::Add) => self.app.mode = Mode::DrawRectStart,
+                        (Key::Character("c"), UiMode::Add) => self.app.mode = Mode::DrawCircleStart,
+                        (Key::Character("m"), UiMode::Add) => self.app.mode = Mode::DrawMirrorStart,
+                        (Key::Character("v"), UiMode::Add) => {
                             self.app.mode = Mode::DrawConvexPolygon { points: Vec::new() }
                         }
-                        (Some(Key::U), UiMode::Add) => {
+                        (Key::Character("u"), UiMode::Add) => {
                             self.app.mode = Mode::DrawCurvedMirror { points: Vec::new() }
                         }
 
-                        (Some(Key::E), UiMode::Selected) => self.app.mode = Mode::EditObject,
-                        (Some(Key::R), UiMode::Selected) => self.app.mode = Mode::Rotate,
-                        (Some(Key::A), UiMode::Selected) => {
+                        (Key::Character("e"), UiMode::Selected) => self.app.mode = Mode::EditObject,
+                        (Key::Character("r"), UiMode::Selected) => self.app.mode = Mode::Rotate,
+                        (Key::Character("a"), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::And))
                         }
-                        (Some(Key::O), UiMode::Selected) => {
+                        (Key::Character("o"), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::Or))
                         }
-                        (Some(Key::N), UiMode::Selected) => {
+                        (Key::Character("n"), UiMode::Selected) => {
                             self.app.mode = Mode::Selecting(Some(LogicOp::AndNot))
                         }
-                        (Some(Key::D), UiMode::Selected) => {
+                        (Key::Character("d"), UiMode::Selected) => {
                             self.app.delete_selected();
                             self.ui_mode = UiMode::Main;
                         }
-                        (Some(Key::C), UiMode::Selected) => self.app.copy_selected(),
-                        (Some(Key::X), UiMode::Selected) => self.app.mirror_on_x_axis_selected(),
-                        (Some(Key::Y), UiMode::Selected) => self.app.mirror_on_y_axis_selected(),
+                        (Key::Character("c"), UiMode::Selected) => self.app.copy_selected(),
+                        (Key::Character("x"), UiMode::Selected) => {
+                            self.app.mirror_on_x_axis_selected()
+                        }
+                        (Key::Character("y"), UiMode::Selected) => {
+                            self.app.mirror_on_y_axis_selected()
+                        }
 
-                        (Some(Key::Q), _) => self.ui_mode = UiMode::Exiting,
+                        (Key::Character("q"), _) => self.ui_mode = UiMode::Exiting,
 
                         _ => {}
                     }
                 }
-                if let (Some(Key::LShift), winit::event::ElementState::Pressed) =
-                    (input.virtual_keycode, input.state)
+                if let (Key::Named(NamedKey::Shift), winit::event::ElementState::Pressed) =
+                    (event.logical_key.as_ref(), event.state)
                 {
                     self.app.tracer.grid.on = true;
                 } else {

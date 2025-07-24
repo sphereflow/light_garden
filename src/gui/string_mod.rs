@@ -27,7 +27,7 @@ impl Gui {
         ui.add(
             DragValue::new::<u64>(&mut string_mod.modulo)
                 .speed(0.3)
-                .clamp_range(0.0..=50000.),
+                .range(0.0..=5000000.),
         );
         ui.label("num");
         ui.add(DragValue::new::<u64>(&mut string_mod.num).speed(0.3));
@@ -70,10 +70,10 @@ impl Gui {
                 ui.add(
                     Slider::new::<f64>(&mut init_len, 0.9997..=1.0002)
                         .text("Init length")
-                        .clamp_to_range(true),
+                        .clamping(SliderClamping::Always),
                 );
                 ui.label("1/nth turn; n:");
-                ui.add(DragValue::new::<u64>(&mut nth_turn).clamp_range(4.0..=1000000.0));
+                ui.add(DragValue::new::<u64>(&mut nth_turn).range(4.0..=1000000.0));
                 angle = std::f64::consts::TAU / (nth_turn as f64);
                 let (im, re) = angle.sin_cos();
                 c.re = re * init_len;
@@ -85,14 +85,14 @@ impl Gui {
                 ref mut d,
             } => {
                 ui.label("r:");
-                ui.add(DragValue::new::<u64>(r).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(r).range(1.0..=50000.0));
                 if s < r {
                     *s = *r;
                 }
                 ui.label("R:");
-                ui.add(DragValue::new::<u64>(s).clamp_range((*r as f32)..=50000.0));
+                ui.add(DragValue::new::<u64>(s).range((*r as f32)..=50000.0));
                 ui.label("d:");
-                ui.add(DragValue::new::<u64>(d).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(d).range(1.0..=50000.0));
             }
             Curve::Lissajous {
                 ref mut a,
@@ -100,11 +100,11 @@ impl Gui {
                 ref mut delta,
             } => {
                 ui.label("a:");
-                ui.add(DragValue::new::<u64>(a).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(a).range(1.0..=50000.0));
                 ui.label("b:");
-                ui.add(DragValue::new::<u64>(b).clamp_range(1.0..=50000.0));
+                ui.add(DragValue::new::<u64>(b).range(1.0..=50000.0));
                 ui.label("delta:");
-                ui.add(DragValue::new::<f64>(delta).clamp_range(1.0..=std::f32::consts::PI));
+                ui.add(DragValue::new::<f64>(delta).range(1.0..=std::f32::consts::PI));
             }
         }
     }
@@ -122,7 +122,7 @@ impl Gui {
         }
         ui.add(
             DragValue::new::<usize>(&mut string_mod.modulo_color_index)
-                .clamp_range(0.0..=(string_mod.modulo_colors.len() as f32 - 0.9)),
+                .range(0.0..=(string_mod.modulo_colors.len() as f32 - 0.9)),
         );
         let ModRemColor {
             color: c,
@@ -135,8 +135,8 @@ impl Gui {
             &mut color,
             color_picker::Alpha::OnlyBlend,
         );
-        ui.add(DragValue::new::<u64>(modulo).clamp_range(1.0..=50000.0));
-        ui.add(DragValue::new::<u64>(rem).clamp_range(0.0..=(*modulo - 1) as f32));
+        ui.add(DragValue::new::<u64>(modulo).range(1.0..=50000.0));
+        ui.add(DragValue::new::<u64>(rem).range(0.0..=(*modulo - 1) as f32));
         let rgba = Rgba::from(color);
         string_mod.modulo_colors[string_mod.modulo_color_index].color =
             [rgba[0], rgba[1], rgba[2], rgba[3]];
@@ -151,7 +151,7 @@ impl Gui {
         }
         ui.add(
             DragValue::new::<usize>(&mut self.app.string_mod_ix)
-                .clamp_range(0.0..=self.app.string_mods.len() as f32 - 0.9),
+                .range(0.0..=self.app.string_mods.len() as f32 - 0.9),
         );
         if ui.button("Add StringMod").clicked() {
             let new = self.get_current_string_mod().clone();
