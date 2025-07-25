@@ -267,7 +267,7 @@ impl Renderer {
                 &bufvec,
                 self.surface_config.width,
                 self.surface_config.height,
-                image::ColorType::Bgra8,
+                image::ColorType::Rgba8,
                 image::ImageFormat::Jpeg,
             ) {
                 Ok(()) => {}

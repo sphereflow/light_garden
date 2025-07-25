@@ -16,27 +16,32 @@ chrono = "0.4"
 egui = "0.32"
 eframe = "0.32"
 egui-wgpu = "0.32"
-egui-winit = "0.32"
+egui-winit = { version = "0.32", default-features = false, features = [
+  "wayland",
+  "x11",
+  "links",
+  "accesskit",
+] }
 winit = "0.30"
-cgmath = "0.17"
+cgmath = "0.18"
 instant = "0.1"
-image = "0.23"
-half = "1.8"
+image = "0.25"
+half = "2.6"
 serde = { version = "1.0.130", features = ["derive"] }
-ron = "0.6"
+ron = "0.10"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 async-executor = "1.0"
-pollster = "0.2"
-env_logger = "0.8"
-rfd = "0.6"
+pollster = "0.4"
+env_logger = "0.11"
+rfd = "0.15"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2.83"
 wasm-bindgen-futures = "0.4.31"
 getrandom = { version = "0.2", features = ["js"] }
 console_error_panic_hook = "0.1.6"
-console_log = "0.1.2"
+console_log = "1"
 web-sys = "0.3.60"
 js-sys = "0.3.60"
 
