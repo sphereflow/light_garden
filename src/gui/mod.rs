@@ -1,8 +1,8 @@
 use crate::light_garden::*;
 use collision2d::geo::*;
 use egui::*;
-use instant::Instant;
 use na::Complex;
+use web_time::Instant;
 use wgpu::{BlendFactor, BlendOperation};
 
 #[cfg(not(target_arch = "wasm32"))]

@@ -1,4 +1,3 @@
-use crate::gui::Gui;
 use crate::light_garden::LightGarden;
 use crate::sub_render_pass::SubRenderPass;
 use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};

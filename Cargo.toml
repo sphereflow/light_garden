@@ -24,7 +24,7 @@ egui-winit = { version = "0.32", default-features = false, features = [
 ] }
 winit = "0.30"
 cgmath = "0.18"
-instant = "0.1"
+web-time = "1.1.0"
 image = "0.25"
 half = "2.6"
 serde = { version = "1.0.130", features = ["derive"] }
@@ -37,13 +37,13 @@ env_logger = "0.11"
 rfd = "0.15"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2.83"
-wasm-bindgen-futures = "0.4.31"
+wasm-bindgen = "0.2.100"
+wasm-bindgen-futures = "0.4.50"
 getrandom = { version = "0.2", features = ["js"] }
-console_error_panic_hook = "0.1.6"
+console_error_panic_hook = "0.1.7"
 console_log = "1"
-web-sys = "0.3.60"
-js-sys = "0.3.60"
+web-sys = "0.3.77"
+js-sys = "0.3.77"
 
 [dependencies.collision2d]
 git = "https://github.com/sphereflow/collision2d"

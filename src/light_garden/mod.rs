@@ -3,7 +3,6 @@ extern crate nalgebra as na;
 use collision2d::geo::*;
 pub use drawer::*;
 use grid::Grid;
-use instant::Instant;
 pub use light::*;
 use na::{distance, Point2};
 pub use object::*;
@@ -16,6 +15,7 @@ use std::{
 pub use string_mod::*;
 pub use tile_map::*;
 pub use tracer::*;
+use web_time::Instant;
 use wgpu::BlendState;
 
 pub mod drawer;
@@ -53,10 +53,10 @@ pub struct LightGarden {
 }
 
 impl LightGarden {
-    pub fn new(canvas_bounds: Rect) -> LightGarden {
+    pub fn new(canvas_bounds: Rect, surface_config: &wgpu::SurfaceConfiguration) -> LightGarden {
         let color_state_descriptor = wgpu::ColorTargetState {
             // placeholder value
-            format: wgpu::TextureFormat::Bgra8UnormSrgb,
+            format: surface_config.format,
             blend: Some(BlendState {
                 alpha: wgpu::BlendComponent {
                     src_factor: wgpu::BlendFactor::SrcAlpha,
@@ -72,6 +72,7 @@ impl LightGarden {
             write_mask: wgpu::ColorWrites::ALL,
         };
         let tracer = Tracer::new(&canvas_bounds);
+        #[cfg_attr(target_arch = "wasm32", expect(unused_mut))]
         let mut app = LightGarden {
             tracer,
             drawer: Drawer::new(&canvas_bounds),
@@ -294,10 +295,6 @@ impl LightGarden {
 
             _ => {}
         }
-    }
-
-    pub fn resumed(&mut self, surface_config: &wgpu::SurfaceConfiguration) {
-        self.color_state_descriptor.format = surface_config.format;
     }
 
     pub fn get_canvas_bounds(&self) -> Rect {
