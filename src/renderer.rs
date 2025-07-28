@@ -93,6 +93,26 @@ impl Renderer {
         );
     }
 
+    fn recreate_projection_bind_groups(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        app: &mut LightGarden,
+    ) {
+        self.sub_rpass_lines.recreate_projection_bind_group(
+            device,
+            queue,
+            &self.surface_config,
+            app,
+        );
+        self.sub_rpass_triangles.recreate_projection_bind_group(
+            device,
+            queue,
+            &self.surface_config,
+            app,
+        );
+    }
+
     pub fn generate_matrix(aspect_ratio: f32) -> cgmath::Matrix4<f32> {
         let mx_projection = cgmath::ortho(-aspect_ratio, aspect_ratio, -1.0, 1.0, 0., 1.);
         let mx_correction = crate::framework::OPENGL_TO_WGPU_MATRIX;
@@ -109,7 +129,7 @@ impl Renderer {
         self.surface_config = surface_config.clone();
         self.texture_renderer
             .generate_render_texture(device, &self.surface_config);
-        self.recreate_pipelines(device, queue, app);
+        self.recreate_projection_bind_groups(device, queue, app);
     }
 
     fn clear_render_texture(&mut self, queue: &Queue) {

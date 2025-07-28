@@ -48,54 +48,11 @@ impl SubRenderPass {
         app: &mut LightGarden,
         primitive_topology: PrimitiveTopology,
     ) -> (RenderPipeline, BindGroup) {
-        // layout for the projection matrix
-        let bind_group_layout = device.create_bind_group_layout(&BindGroupLayoutDescriptor {
-            label: Some("Renderer: bind group layout"),
-            entries: &[BindGroupLayoutEntry {
-                binding: 0,
-                visibility: ShaderStages::VERTEX,
-                ty: BindingType::Buffer {
-                    ty: BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: BufferSize::new(64),
-                },
-                count: None,
-            }],
-        });
-
-        // create the projection matrix
-        let aspect = surface_config.width as f32 / surface_config.height as f32;
-        let mx = Renderer::generate_matrix(aspect);
-        let mx_ref: &[f32; 16] = mx.as_ref();
-        let mx_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("u_Transform"),
-            contents: bytemuck::cast_slice(mx_ref),
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
-
-        // set new canvas bounds
-        let new_canvas_bounds = Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64);
-        app.tracer.resize(&new_canvas_bounds);
-        app.drawer.resize(&new_canvas_bounds);
-
-        // write to the projection matix buffer
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("u_Transform"),
-            layout: &bind_group_layout,
-            entries: &[BindGroupEntry {
-                binding: 0,
-                resource: BindingResource::Buffer(BufferBinding {
-                    buffer: &mx_buf,
-                    offset: 0,
-                    size: None,
-                }),
-            }],
-        });
-        queue.write_buffer(&mx_buf, 0, bytemuck::cast_slice(mx_ref));
+        let bind_group = Self::create_projection_bind_group(device, queue, surface_config, app);
 
         let pipeline_layout = device.create_pipeline_layout(&PipelineLayoutDescriptor {
             label: Some("pipeline layout"),
-            bind_group_layouts: &[&bind_group_layout],
+            bind_group_layouts: &[&Self::projection_bind_group_layout(device)],
             push_constant_ranges: &[],
         });
 
@@ -161,6 +118,71 @@ impl SubRenderPass {
         );
         self.pipeline = pipeline;
         self.matrix_bind_group = bind_group;
+    }
+
+    fn projection_bind_group_layout(device: &Device) -> BindGroupLayout {
+        device.create_bind_group_layout(&BindGroupLayoutDescriptor {
+            label: Some("Renderer: bind group layout"),
+            entries: &[BindGroupLayoutEntry {
+                binding: 0,
+                visibility: ShaderStages::VERTEX,
+                ty: BindingType::Buffer {
+                    ty: BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: BufferSize::new(64),
+                },
+                count: None,
+            }],
+        })
+    }
+
+    fn create_projection_bind_group(
+        device: &Device,
+        queue: &Queue,
+        surface_config: &SurfaceConfiguration,
+        app: &mut LightGarden,
+    ) -> BindGroup {
+        // create the projection matrix
+        let aspect = surface_config.width as f32 / surface_config.height as f32;
+        let mx = Renderer::generate_matrix(aspect);
+        let mx_ref: &[f32; 16] = mx.as_ref();
+        let mx_buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("u_Transform"),
+            contents: bytemuck::cast_slice(mx_ref),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+
+        // set new canvas bounds
+        let new_canvas_bounds = Rect::from_tlbr(1., -aspect as f64, -1., aspect as f64);
+        app.tracer.resize(&new_canvas_bounds);
+        app.drawer.resize(&new_canvas_bounds);
+
+        // write to the projection matix buffer
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("u_Transform"),
+            layout: &Self::projection_bind_group_layout(device),
+            entries: &[BindGroupEntry {
+                binding: 0,
+                resource: BindingResource::Buffer(BufferBinding {
+                    buffer: &mx_buf,
+                    offset: 0,
+                    size: None,
+                }),
+            }],
+        });
+        queue.write_buffer(&mx_buf, 0, bytemuck::cast_slice(mx_ref));
+        bind_group
+    }
+
+    pub fn recreate_projection_bind_group(
+        &mut self,
+        device: &Device,
+        queue: &Queue,
+        surface_config: &SurfaceConfiguration,
+        app: &mut LightGarden,
+    ) {
+        self.matrix_bind_group =
+            Self::create_projection_bind_group(device, queue, surface_config, app)
     }
 
     pub fn update_vertex_buffer(&mut self, device: &Device, vertices: &[(P2, Color)]) {
