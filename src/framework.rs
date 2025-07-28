@@ -37,17 +37,7 @@ pub struct Setup {
 }
 
 pub async fn setup(window: Arc<winit::window::Window>, proxy: EventLoopProxy<Setup>) {
-    log::info!("Initializing the surface...");
-
-    // wgpu instance creates adapters and surfaces
-    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-        #[cfg(not(target_arch = "wasm32"))]
-        backends: wgpu::Backends::PRIMARY,
-        #[cfg(target_arch = "wasm32")]
-        backends: wgpu::Backends::GL,
-        ..Default::default()
-    });
-
+    let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::default());
     // create the main rendering surface (on screen or window)
     let (size, surface) = {
         let size = window.inner_size();
@@ -245,7 +235,6 @@ impl ApplicationHandler<Setup> for AppState {
                 }
                 WindowEvent::Resized(size) => {
                     log::info!("Resizing to {size:?}");
-                    println!("Resized: {size:?}");
                     surface_config.width = size.width.max(1);
                     surface_config.height = size.height.max(1);
                     renderer.resize(surface_config, device, queue, &mut gui.app);
