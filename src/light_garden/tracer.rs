@@ -4,8 +4,8 @@ use std::{mem, slice::Iter};
 pub struct Tracer {
     objects: Vec<Object>,
     lights: Vec<Light>,
-    has_drawing_object: bool,
-    has_drawing_light: bool,
+    drawing_object: Option<Object>,
+    drawing_light: Option<Light>,
     pub max_bounce: u32,
     pub chunk_size: usize,
     pub cutoff_color: Color,
@@ -32,8 +32,8 @@ impl Tracer {
         Tracer {
             lights: vec![light],
             objects,
-            has_drawing_object: false,
-            has_drawing_light: false,
+            drawing_object: None,
+            drawing_light: None,
             max_bounce: 5,
             cutoff_color: [0.001; 4],
             chunk_size: 100,
@@ -46,84 +46,51 @@ impl Tracer {
     }
 
     pub fn clear_objects(&mut self) {
-        self.has_drawing_object = false;
+        self.drawing_object = None;
         self.objects.clear();
         self.tile_map.clear_tiles();
     }
 
     pub fn clear(&mut self) {
-        self.has_drawing_object = false;
-        self.has_drawing_light = false;
+        self.drawing_object = None;
+        self.drawing_light = None;
         self.objects.clear();
         self.lights.clear();
         self.tile_map.clear_tiles();
     }
 
     pub fn add_drawing_object(&mut self, obj: Object) {
-        if self.has_drawing_object {
-            self.tile_map.pop_obj();
-            self.objects.pop();
-        }
-        self.has_drawing_object = true;
-        self.tile_map.push_obj(&obj);
-        self.objects.push(obj);
+        self.drawing_object = Some(obj);
     }
 
     pub fn finish_drawing_object(&mut self, abort: bool) {
-        if self.has_drawing_object {
-            if abort {
-                self.tile_map.pop_obj();
-                self.objects.pop();
-            }
-            self.has_drawing_object = false;
+        if abort {
+            self.drawing_object = None
+        } else if let Some(obj) = self.drawing_object.take() {
+            self.tile_map.push_obj(&obj);
+            self.objects.push(obj);
         }
     }
 
     pub fn add_drawing_light(&mut self, light: Light) {
-        if self.has_drawing_light {
-            self.lights.pop();
-        }
-        self.has_drawing_light = true;
-        self.lights.push(light);
+        self.drawing_light = Some(light);
     }
 
     pub fn finish_drawing_light(&mut self, abort: bool) {
-        if self.has_drawing_light {
-            if abort {
-                self.lights.pop();
-            }
-            self.has_drawing_light = false;
+        if abort {
+            self.drawing_light = None
+        } else {
+            self.lights.extend(self.drawing_light.take());
         }
     }
 
     pub fn push_object(&mut self, object: Object) {
-        if self.has_drawing_object {
-            self.tile_map.pop_obj();
-            let dobject = self
-                .objects
-                .pop()
-                .expect("push_object: expected at least one drawing object but found an empty Vec");
-            self.tile_map.push_obj(&object);
-            self.objects.push(object);
-            self.tile_map.push_obj(&dobject);
-            self.objects.push(dobject);
-        } else {
-            self.tile_map.push_obj(&object);
-            self.objects.push(object);
-        }
+        self.tile_map.push_obj(&object);
+        self.objects.push(object);
     }
 
     pub fn push_light(&mut self, light: Light) {
-        if self.has_drawing_light {
-            let dlight = self
-                .lights
-                .pop()
-                .expect("push_light: expected at least one drawing light but found an empty Vec");
-            self.lights.push(light);
-            self.lights.push(dlight);
-        } else {
-            self.lights.push(light);
-        }
+        self.lights.push(light);
     }
 
     pub fn index_object(&mut self, ix: usize) -> &mut Object {
@@ -159,12 +126,6 @@ impl Tracer {
     pub fn obj_changed(&mut self, obj_index: usize) {
         self.tile_map
             .update_object(obj_index, &mut self.objects[obj_index]);
-    }
-
-    pub fn drawing_object_changed(&mut self) {
-        if self.has_drawing_object {
-            self.obj_changed(self.objects.len() - 1);
-        }
     }
 
     pub fn update_tile_map(&mut self) {
@@ -248,7 +209,7 @@ impl Tracer {
 
     pub fn trace_all_reflective(&mut self) -> Vec<(Vec<P2>, Color)> {
         let mut all_line_strips: Vec<(Vec<P2>, Color)> = Vec::new();
-        for light in self.lights.iter() {
+        for light in self.lights.iter().chain(self.drawing_light.iter()) {
             #[cfg(not(target_arch = "wasm32"))]
             {
                 let line_strips = light
@@ -256,12 +217,7 @@ impl Tracer {
                     .par_iter()
                     .map(|ray| {
                         let mut line_strip = vec![ray.get_origin()];
-                        self.trace_reflective(
-                            &mut line_strip,
-                            ray,
-                            light.get_color(),
-                            self.max_bounce,
-                        );
+                        self.trace_reflective(&mut line_strip, ray, self.max_bounce);
                         (line_strip, light.get_color())
                     })
                     .collect::<Vec<(Vec<P2>, Color)>>();
@@ -289,7 +245,7 @@ impl Tracer {
         all_line_strips
     }
 
-    pub fn trace_reflective(&self, rays: &mut Vec<P2>, ray: &Ray, color: Color, max_bounce: u32) {
+    pub fn trace_reflective(&self, rays: &mut Vec<P2>, ray: &Ray, max_bounce: u32) {
         if max_bounce == 0 {
             return;
         }
@@ -298,7 +254,7 @@ impl Tracer {
         if let Some(intersection_point) = ray.intersect(&self.canvas_bounds) {
             ret_intersect = Some(intersection_point.get_first().0);
         }
-        for obj in self.objects.iter() {
+        for obj in self.objects.iter().chain(self.drawing_object.iter()) {
             if let Some(reflected) = ray.reflect_on(&obj.get_geometry()) {
                 if let Some(intersect) = ret_intersect {
                     if distance(&ray.get_origin(), &reflected.get_origin())
@@ -318,16 +274,16 @@ impl Tracer {
             rays.push(ls);
         }
         if let Some(reflected) = refopt {
-            self.trace_reflective(rays, &reflected, color, max_bounce - 1);
+            self.trace_reflective(rays, &reflected, max_bounce - 1);
         }
     }
 
     pub fn trace_all(&mut self) -> Vec<(P2, Color)> {
         let instant_start = Instant::now();
         let mut all_lines: Vec<(P2, Color)> = Vec::new();
-        for light in self.lights.iter() {
+        for light in self.lights.iter().chain(self.drawing_light.iter()) {
             let mut refractive_index = 1.;
-            for obj in self.objects.iter() {
+            for obj in self.objects.iter().chain(self.drawing_object.iter()) {
                 if obj.contains(&light.get_origin()) {
                     if let Some(material) = obj.material_opt {
                         refractive_index = material.refractive_index;
@@ -388,7 +344,7 @@ impl Tracer {
         // );
 
         // draw control lines for cubic bezier curves
-        for obj in self.objects.iter() {
+        for obj in self.objects.iter().chain(self.drawing_object.iter()) {
             if let ObjectE::CurvedMirror(cm) = obj.object_enum {
                 all_lines.append(&mut cm.get_control_lines());
             }
@@ -497,18 +453,6 @@ impl Tracer {
                             refracted_refractive_index,
                         );
                         let (reflected, orefracted, reflectance) = result;
-                        if let ObjectE::Ellipse(e) = obj.object_enum {
-                            if self.debug_key_pressed {
-                                dbg!(
-                                    ray,
-                                    intersection,
-                                    normal,
-                                    reflected,
-                                    orefracted,
-                                    reflectance
-                                );
-                            }
-                        }
                         rays.push((ray.get_origin(), *color));
                         rays.push((reflected.get_origin(), *color));
 

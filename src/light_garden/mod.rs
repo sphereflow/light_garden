@@ -451,7 +451,6 @@ impl LightGarden {
                 self.tracer
                     .add_drawing_object(Object::new_mirror(*start, self.mouse_pos));
                 self.tracer.finish_drawing_object(false);
-                self.tracer.drawing_object_changed();
                 self.mode = Mode::Selecting(None);
             }
 
@@ -466,7 +465,6 @@ impl LightGarden {
                     *start,
                     distance(start, &self.mouse_pos),
                 ));
-                self.tracer.drawing_object_changed();
                 self.tracer.finish_drawing_object(false);
                 self.mode = Mode::Selecting(None);
             }
@@ -483,7 +481,6 @@ impl LightGarden {
                 let height = vdiff_t2[1].abs();
                 self.tracer
                     .add_drawing_object(Object::new_rect(*start, width, height));
-                self.tracer.drawing_object_changed();
                 self.tracer.finish_drawing_object(false);
                 self.mode = Mode::Selecting(None);
             }
@@ -527,7 +524,6 @@ impl LightGarden {
                     .push_object(Object::new_ellipse(*origin, *a, dif.abs()));
                 self.mode = Mode::Selecting(None);
                 self.tracer.finish_drawing_object(false);
-                self.tracer.drawing_object_changed();
             }
 
             Mode::SelectTile => {
