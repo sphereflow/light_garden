@@ -18,8 +18,8 @@ impl Gui {
     pub fn edit_light(light: &mut Light, ui: &mut Ui) {
         let mut update_light = false;
         match light {
-            Light::PointLight(ref mut _point) => { /* no user interface elements to add */ }
-            Light::SpotLight(ref mut spot) => {
+            Light::PointLight(_point) => { /* no user interface elements to add */ }
+            Light::SpotLight(spot) => {
                 // spot angle
                 // conversion radian -> degrees
                 let mut spot_angle = spot.spot_angle * 180. / PI;
@@ -31,7 +31,7 @@ impl Gui {
                     update_light = true;
                 }
             }
-            Light::DirectionalLight(ref mut _direction) => {}
+            Light::DirectionalLight(_direction) => {}
         }
 
         // num rays

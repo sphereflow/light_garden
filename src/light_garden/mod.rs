@@ -4,7 +4,7 @@ use collision2d::geo::*;
 pub use drawer::*;
 use grid::Grid;
 pub use light::*;
-use na::{distance, Point2};
+use na::{Point2, distance};
 pub use object::*;
 #[cfg(not(target_arch = "wasm32"))]
 use rayon::prelude::*;
@@ -477,8 +477,8 @@ impl LightGarden {
                 };
             }
 
-            Mode::DrawRectEnd { ref start } => {
-                let vdiff_t2 = 2. * (self.mouse_pos - start);
+            Mode::DrawRectEnd { start } => {
+                let vdiff_t2 = 2. * (self.mouse_pos - *start);
                 let width = vdiff_t2[0].abs();
                 let height = vdiff_t2[1].abs();
                 self.tracer
@@ -488,7 +488,7 @@ impl LightGarden {
                 self.mode = Mode::Selecting(None);
             }
 
-            Mode::DrawConvexPolygon { ref mut points } => {
+            Mode::DrawConvexPolygon { points } => {
                 points.push(self.mouse_pos);
                 if points.len() > 2 {
                     self.tracer
@@ -496,7 +496,7 @@ impl LightGarden {
                 }
             }
 
-            Mode::DrawCurvedMirror { ref mut points } => {
+            Mode::DrawCurvedMirror { points } => {
                 points.push(self.mouse_pos);
                 if points.len() == 4 {
                     self.tracer
