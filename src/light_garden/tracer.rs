@@ -230,12 +230,7 @@ impl Tracer {
                     .iter()
                     .map(|ray| {
                         let mut line_strip = vec![ray.get_origin()];
-                        self.trace_reflective(
-                            &mut line_strip,
-                            ray,
-                            light.get_color(),
-                            self.max_bounce,
-                        );
+                        self.trace_reflective(&mut line_strip, ray, self.max_bounce);
                         (line_strip, light.get_color())
                     })
                     .collect::<Vec<(Vec<P2>, Color)>>();

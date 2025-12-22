@@ -2,8 +2,6 @@ use crate::gui::UiMode;
 use crate::light_garden::LightGarden;
 use crate::{gui::Gui, renderer::Renderer};
 use std::sync::Arc;
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::JsValue;
 use wgpu::Adapter;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;

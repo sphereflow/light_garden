@@ -1,6 +1,6 @@
 use crate::light_garden::LightGarden;
 use crate::sub_render_pass::SubRenderPass;
-use crate::texture_renderer::{TextureRenderer, RENDER_TEXTURE_FORMAT};
+use crate::texture_renderer::{RENDER_TEXTURE_FORMAT, TextureRenderer};
 use bytemuck::{Pod, Zeroable};
 use egui::FullOutput;
 use egui_wgpu::ScreenDescriptor;
@@ -266,10 +266,8 @@ impl Renderer {
 
         queue.submit(iter::once(screenshot_encoder.finish()));
         let buffer_slice = buff.slice(..);
-        let bytes_future = buffer_slice.map_async(MapMode::Read, |_arg| {});
-        device.poll(PollType::Wait);
-
-        if let () = bytes_future {
+        buffer_slice.map_async(MapMode::Read, |_arg| {});
+        if device.poll(PollType::Wait).is_ok() {
             let padded_buffer = buffer_slice.get_mapped_range();
             let mut bufvec = Vec::new();
             for padded in padded_buffer.chunks(padded_bytes_per_row as usize) {
