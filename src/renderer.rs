@@ -62,7 +62,11 @@ impl Renderer {
         let texture_renderer =
             TextureRenderer::init(device, surface_config, app.color_state_descriptor.clone());
 
-        let egui_rpass = egui_wgpu::Renderer::new(device, surface_config.format, None, 1, false);
+        let egui_rpass = egui_wgpu::Renderer::new(
+            device,
+            surface_config.format,
+            egui_wgpu::RendererOptions::default(),
+        );
 
         Renderer {
             shader,
@@ -172,6 +176,7 @@ impl Renderer {
                         store: StoreOp::Store,
                     },
                     resolve_target: None,
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -227,6 +232,7 @@ impl Renderer {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
                         store: StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -267,7 +273,13 @@ impl Renderer {
         queue.submit(iter::once(screenshot_encoder.finish()));
         let buffer_slice = buff.slice(..);
         buffer_slice.map_async(MapMode::Read, |_arg| {});
-        if device.poll(PollType::Wait).is_ok() {
+        if device
+            .poll(PollType::Wait {
+                submission_index: None,
+                timeout: None,
+            })
+            .is_ok()
+        {
             let padded_buffer = buffer_slice.get_mapped_range();
             let mut bufvec = Vec::new();
             for padded in padded_buffer.chunks(padded_bytes_per_row as usize) {
@@ -378,6 +390,7 @@ impl Renderer {
                         load: LoadOp::Clear(wgpu::Color::BLACK),
                         store: StoreOp::Store,
                     },
+                    depth_slice: None,
                 })],
                 depth_stencil_attachment: None,
                 timestamp_writes: None,
@@ -465,6 +478,7 @@ impl Renderer {
                             load: LoadOp::Clear(wgpu::Color::BLACK),
                             store: StoreOp::Store,
                         },
+                        depth_slice: None,
                     })],
                     depth_stencil_attachment: None,
                     timestamp_writes: None,

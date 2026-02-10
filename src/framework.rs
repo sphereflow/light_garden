@@ -2,7 +2,7 @@ use crate::gui::UiMode;
 use crate::light_garden::LightGarden;
 use crate::{gui::Gui, renderer::Renderer};
 use std::sync::Arc;
-use wgpu::Adapter;
+use wgpu::{Adapter, ExperimentalFeatures};
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
 use winit::event_loop::{ControlFlow, EventLoop, EventLoopProxy};
@@ -78,6 +78,7 @@ pub async fn setup(window: Arc<winit::window::Window>, proxy: EventLoopProxy<Set
             required_limits: needed_limits,
             memory_hints: wgpu::MemoryHints::Performance,
             trace: wgpu::Trace::Off,
+            experimental_features: ExperimentalFeatures::disabled(),
         })
         .await
         .expect("Cannot request GPU device");
